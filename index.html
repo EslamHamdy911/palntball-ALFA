@@ -3,222 +3,303 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEON WARS: Mobile Fixed</title>
+    <title>NEON WARS: Legacy</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* إجبار المتصفح على عدم التفاعل مع اللمسات كلفتات تكبير */
-        * {
-            touch-action: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-
-        body {
-            margin: 0; overflow: hidden; background-color: #050505;
-            font-family: 'Orbitron', sans-serif;
-        }
-
+        * { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Orbitron', sans-serif; }
         canvas { display: block; }
-
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
-        }
-
-        #start-screen {
+        
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        /* شاشات البداية والنهاية */
+        .screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(5, 5, 10, 0.95);
             display: flex; flex-direction: column;
             justify-content: center; align-items: center; pointer-events: auto; z-index: 100;
         }
-
+        
         h1 { color: #00f3ff; text-shadow: 0 0 20px #00f3ff; font-size: 40px; text-align: center; margin: 0; }
-        p { color: #aaa; margin-top: 5px; font-size: 12px; }
+        h2 { color: #ff0055; text-shadow: 0 0 20px #ff0055; font-size: 30px; margin-top: 10px; }
+        p { color: #aaa; margin-top: 5px; font-size: 14px; text-align: center; max-width: 80%; }
 
         .btn {
             background: transparent; border: 2px solid #00f3ff; color: #00f3ff;
             padding: 15px 40px; font-size: 18px; font-family: 'Orbitron', sans-serif;
             cursor: pointer; margin-top: 30px; text-transform: uppercase;
-            box-shadow: 0 0 10px #00f3ff;
+            box-shadow: 0 0 10px #00f3ff; animation: pulse 2s infinite;
         }
         .btn:active { background: #00f3ff; color: #000; }
-
-        #hud {
-            padding: 15px; display: flex; justify-content: space-between; width: 90%; margin: 0 auto;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8); font-size: 18px; font-weight: bold;
-        }
         
-        /* رسالة توضيحية للمناطق */
-        #zones-hint {
-            position: absolute; bottom: 10px; width: 100%; text-align: center;
-            color: rgba(255,255,255,0.2); font-size: 10px; pointer-events: none;
+        @keyframes pulse { 0% { box-shadow: 0 0 10px #00f3ff; } 50% { box-shadow: 0 0 25px #00f3ff; } 100% { box-shadow: 0 0 10px #00f3ff; } }
+
+        #hud { padding: 15px; display: flex; justify-content: space-between; width: 90%; margin: 0 auto; text-shadow: 0 2px 5px rgba(0,0,0,0.8); font-size: 18px; font-weight: bold; }
+        
+        /* رسالة الموجات */
+        #wave-msg {
+            position: absolute; top: 20%; width: 100%; text-align: center;
+            color: #f1c40f; font-size: 24px; font-weight: bold; opacity: 0; transition: opacity 0.5s;
         }
     </style>
 </head>
 <body>
 
-    <div id="start-screen">
+    <!-- شاشة البداية -->
+    <div id="start-screen" class="screen">
         <h1>NEON WARS</h1>
-        <p>MOBILE CONTROL FIXED</p>
+        <p>MISSION: SURVIVE & KILL THE BOSS</p>
         <button class="btn" onclick="startGame()">START MISSION</button>
+    </div>
+
+    <!-- شاشة الفوز (النهاية) -->
+    <div id="win-screen" class="screen" style="display:none;">
+        <h1>MISSION COMPLETE!</h1>
+        <p>YOU DEFEATED THE BOSS & SCORED 200+</p>
+        <p>PREPARE FOR PART 2...</p>
+        <!-- ضع رابط الجزء الثاني هنا في href -->
+        <a id="next-game-link" href="https://your-github-username.github.io/part2-repo" target="_blank">
+            <button class="btn">DOWNLOAD PART 2</button>
+        </a>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
         <div id="hud">
-            <div style="color:#00f3ff">AGENT: <span id="p-score">0</span></div>
-            <div style="color:#ff0055">ROGUE: <span id="e-score">0</span></div>
+            <div style="color:#00f3ff">SCORE: <span id="p-score">0</span></div>
+            <div style="color:#ff0055">BOSS HP: <span id="boss-hp">---</span></div>
         </div>
-        <div id="zones-hint">LEFT: MOVE | RIGHT: FIRE</div>
+        <div id="wave-msg">WARNING: NEW THREAT!</div>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // === إعدادات الشاشة ===
+        // إعدادات الشاشة
         let width, height;
         function resize() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width;
-            canvas.height = height;
+            width = window.innerWidth; height = window.innerHeight;
+            canvas.width = width; canvas.height = height;
         }
-        window.addEventListener('resize', resize);
-        resize();
+        window.addEventListener('resize', resize); resize();
 
-        // === متغيرات اللعبة ===
+        // متغيرات اللعبة
         let gameRunning = false;
-        let score = { p: 0, e: 0 };
-        let bullets = [], particles = [];
+        let score = 0;
+        let fireRate = 20; // كلما قل الرقم زادت السرعة
+        let frame = 0;
+        
+        // حالات اللعبة
+        let enemies = [];
+        let bullets = [];
+        let particles = [];
         let shake = 0;
+        let bossActive = false;
+        
+        // المنزل (Spawn Point)
+        const house = { x: 0, y: 60, w: 100, h: 60 }; // سيتم ضبط x في المنتصف
 
-        // === نظام التحكم (المعاد كتابته بالكامل) ===
+        // التحكم
         const input = {
-            joystick: { active: false, x: 0, y: 0, dx: 0, dy: 0, id: null }, // عصا الحركة
-            fireBtn: { active: false, x: 0, y: 0, id: null }, // زر الإطلاق
+            joystick: { active: false, x: 0, y: 0, dx: 0, dy: 0, id: null },
+            fireBtn: { active: false, x: 0, y: 0, id: null },
             keys: { w:false, a:false, s:false, d:false },
             mouse: { x: 0, y: 0, down: false },
             isMobile: false
         };
 
-        // === الشخصيات ===
+        // الكائنات
         class Agent {
-            constructor(x, y, color, isPlayer) {
-                this.x = x; this.y = y; this.color = color;
-                this.angle = 0; this.radius = 20; this.isPlayer = isPlayer;
-                this.speed = isPlayer ? 4 : 3;
+            constructor(x, y, type) {
+                this.x = x; this.y = y; this.type = type; // 'player', 'enemy', 'boss'
+                this.angle = 0;
+                
+                if(type === 'player') {
+                    this.radius = 20; this.color = '#00f3ff'; this.speed = 4; this.hp = 100;
+                } else if (type === 'boss') {
+                    this.radius = 40; this.color = '#f1c40f'; this.speed = 2.5; this.hp = 100;
+                } else { // enemy
+                    this.radius = 20; this.color = '#ff0055'; this.speed = 3; this.hp = 1;
+                }
             }
 
             update(target) {
-                let dx = 0, dy = 0;
+                let dx=0, dy=0;
 
-                if (this.isPlayer) {
-                    // 1. حساب الحركة (أولوية للمس)
-                    if (input.joystick.active) {
-                        dx = input.joystick.dx;
-                        dy = input.joystick.dy;
-                    } else {
-                        // كيبورد
-                        if(input.keys.w) dy = -1;
-                        if(input.keys.s) dy = 1;
-                        if(input.keys.a) dx = -1;
-                        if(input.keys.d) dx = 1;
+                if (this.type === 'player') {
+                    // حركة
+                    if (input.joystick.active) { dx = input.joystick.dx; dy = input.joystick.dy; }
+                    else {
+                        if(input.keys.w) dy = -1; if(input.keys.s) dy = 1;
+                        if(input.keys.a) dx = -1; if(input.keys.d) dx = 1;
                     }
 
-                    // 2. حساب الدوران (أولوية للمس)
-                    if (input.isMobile) {
-                        // في الموبايل، الدوران يتبع الحركة
-                        if (dx !== 0 || dy !== 0) {
-                            this.angle = Math.atan2(dy, dx);
-                        }
-                    } else {
-                        // في الكمبيوتر، الدوران يتبع الماوس
+                    // دوران
+                    if (input.isMobile) { if(dx||dy) this.angle = Math.atan2(dy, dx); }
+                    else {
                         this.angle = Math.atan2(input.mouse.y - this.y, input.mouse.x - this.x);
-                        if(input.mouse.down) shoot(this);
+                        if(input.mouse.down && frame % fireRate === 0) shoot(this);
                     }
 
-                    // إطلاق النار للموبايل
-                    if (input.isMobile && input.fireBtn.active) {
-                        // نطلق كل 10 فريمات تقريباً لتجنب سيل من الرصاص
-                        if(frame % 10 === 0) shoot(this);
-                    }
+                    // إطلاق نار موبايل (حسب سرعة fireRate)
+                    if (input.isMobile && input.fireBtn.active && frame % fireRate === 0) shoot(this);
 
                 } else {
-                    // ذكاء العدو
-                    let ang = Math.atan2(target.y - this.y, target.x - this.x);
+                    // ذكاء الأعداء والبوس
                     let dist = Math.hypot(target.x - this.x, target.y - this.y);
-                    
-                    this.angle = ang;
-                    if(dist > 180) { dx = Math.cos(ang); dy = Math.sin(ang); }
-                    else if(dist < 100) { dx = -Math.cos(ang); dy = -Math.sin(ang); }
+                    this.angle = Math.atan2(target.y - this.y, target.x - this.x);
 
-                    if(Math.random() < 0.02) shoot(this);
+                    let moveDist = (this.type === 'boss') ? 250 : 150; // البوس يقف أبعد
+
+                    if(dist > moveDist) { dx = Math.cos(this.angle); dy = Math.sin(this.angle); }
+                    else if(dist < moveDist - 50) { dx = -Math.cos(this.angle); dy = -Math.sin(this.angle); }
+
+                    // إطلاق نار الأعداء
+                    let shootProb = (this.type === 'boss') ? 0.05 : 0.02;
+                    if(Math.random() < shootProb) shoot(this);
                 }
 
                 this.x += dx * this.speed;
                 this.y += dy * this.speed;
                 
-                // حدود الشاشة
+                // حدود
                 this.x = Math.max(20, Math.min(width-20, this.x));
                 this.y = Math.max(20, Math.min(height-20, this.y));
             }
 
             draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle);
-                
-                // تأثير التوهج
+                ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
                 ctx.shadowBlur = 15; ctx.shadowColor = this.color;
                 
                 // الجسم
                 ctx.fillStyle = this.color;
                 ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
                 
-                // تفاصيل (خوذة)
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = '#111';
-                ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill(); // وسط
-                ctx.fillRect(5, -5, 20, 10); // سلاح
-                
+                // تفاصيل
+                ctx.shadowBlur = 0; ctx.fillStyle = '#111';
+                if(this.type === 'boss') {
+                    // البوس: سلاحين
+                    ctx.fillRect(10, -25, 40, 15); // سلاح 1
+                    ctx.fillRect(10, 10, 40, 15);  // سلاح 2
+                    ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI*2); ctx.fill(); // خوذة كبيرة
+                } else {
+                    // عادي
+                    ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+                    ctx.fillRect(5, -5, 20, 10);
+                }
                 ctx.restore();
             }
         }
 
-        let player = new Agent(100, 100, '#00f3ff', true);
-        let enemy = new Agent(width-100, height-100, '#ff0055', false);
-        let frame = 0;
+        let player;
 
-        // === الخلفية والرسم ===
-        function drawGrid() {
-            ctx.fillStyle = '#050505'; ctx.fillRect(0,0,width,height);
-            ctx.strokeStyle = 'rgba(0, 243, 255, 0.05)'; ctx.lineWidth = 1;
-            ctx.beginPath();
-            for(let i=0; i<width; i+=50) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
-            for(let i=0; i<height; i+=50) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
-            ctx.stroke();
+        // === الوظائف ===
+        function spawnEnemy(isBoss = false) {
+            let e = new Agent(width/2, 100, isBoss ? 'boss' : 'enemy');
+            enemies.push(e);
+            // تأثير خروج من المنزل
+            createExplosion(width/2, 80, isBoss ? '#f1c40f' : '#ff0055');
         }
 
-        function createExplosion(x, y, color) {
-            shake = 5;
-            for(let i=0; i<10; i++) particles.push({x, y, vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8, life:1, color});
+        function showMsg(text) {
+            let el = document.getElementById('wave-msg');
+            el.innerText = text; el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 3000);
+        }
+
+        function checkProgression() {
+            // 1. زيادة سرعة السلاح كل 10
+            if(score > 0 && score % 10 === 0 && score < 100) {
+                // تقليل الرقم يعني زيادة السرعة (الحد الأدنى 5)
+                let newRate = 20 - Math.floor(score/10); 
+                fireRate = Math.max(5, newRate);
+            }
+
+            // 2. الموجة الثانية (30)
+            if(score === 30 && enemies.length < 2 && !bossActive) {
+                spawnEnemy(); 
+                showMsg("REINFORCEMENTS ARRIVED!");
+            }
+            // التأكد من بقاء عدوين إذا مات أحدهم بعد الـ 30 وقبل الـ 100
+            if(score > 30 && score < 100 && enemies.length < 2 && !bossActive) {
+                if(Math.random() < 0.02) spawnEnemy();
+            }
+            // إعادة تعبئة العدو الأول
+            if(score < 100 && enemies.length < 1 && !bossActive) {
+                if(Math.random() < 0.05) spawnEnemy();
+            }
+
+            // 3. البوس (100)
+            if(score >= 100 && !bossActive) {
+                bossActive = true;
+                showMsg("⚠️ BOSS APPROACHING ⚠️");
+                
+                // البوس يقتل الأتباع
+                enemies.forEach(e => createExplosion(e.x, e.y, '#ff0055'));
+                enemies = []; 
+                
+                setTimeout(() => {
+                    spawnEnemy(true); // Spawn Boss
+                }, 1000);
+            }
+
+            // 4. الفوز (200)
+            if(score >= 200) {
+                gameRunning = false;
+                document.getElementById('win-screen').style.display = 'flex';
+                // هنا نضع رابطك الحقيقي
+                // document.getElementById('next-game-link').href = "RABIT_EL_PART_2";
+            }
         }
 
         function shoot(s) {
-            bullets.push({
-                x: s.x, y: s.y, 
-                vx: Math.cos(s.angle)*12, vy: Math.sin(s.angle)*12, 
-                color: s.color, owner: s.isPlayer ? 'p' : 'e'
+            let shots = [];
+            if(s.type === 'boss') {
+                // البوس يطلق طلقتين
+                shots.push({a: s.angle - 0.2});
+                shots.push({a: s.angle + 0.2});
+            } else {
+                shots.push({a: s.angle + (Math.random()-0.5)*0.1});
+            }
+
+            shots.forEach(shot => {
+                bullets.push({
+                    x: s.x, y: s.y, 
+                    vx: Math.cos(shot.a)*12, vy: Math.sin(shot.a)*12, 
+                    color: s.color, owner: s.type === 'player' ? 'p' : 'e'
+                });
             });
         }
 
-        // === حلقة اللعبة ===
+        function createExplosion(x, y, color) {
+            shake = 10;
+            for(let i=0; i<15; i++) particles.push({x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color});
+        }
+
+        function drawHouse() {
+            let hx = width/2 - 50;
+            // توهج المنزل
+            ctx.shadowBlur = 20; ctx.shadowColor = '#00f3ff';
+            ctx.fillStyle = '#111';
+            // القاعدة
+            ctx.fillRect(hx, house.y, 100, 60);
+            // السقف
+            ctx.beginPath(); ctx.moveTo(hx, house.y); ctx.lineTo(hx+50, house.y-40); ctx.lineTo(hx+100, house.y); ctx.fill();
+            // الباب (يضيء)
+            ctx.fillStyle = bossActive ? '#f1c40f' : '#ff0055';
+            ctx.fillRect(hx+35, house.y+20, 30, 40);
+            ctx.shadowBlur = 0;
+        }
+
+        // حلقة اللعبة
         function startGame() {
             document.getElementById('start-screen').style.display = 'none';
+            player = new Agent(width/2, height-150, 'player');
+            enemies = []; bullets = []; score = 0; fireRate = 20; bossActive = false;
             gameRunning = true;
+            spawnEnemy(); // أول عدو
             loop();
         }
 
@@ -227,165 +308,147 @@
             requestAnimationFrame(loop);
             frame++;
 
-            // اهتزاز الشاشة
+            // اهتزاز
             ctx.save();
-            if(shake > 0) {
-                ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
-                shake *= 0.9;
-            }
+            if(shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.9; }
 
-            drawGrid();
+            // خلفية
+            ctx.fillStyle = '#050505'; ctx.fillRect(0,0,width,height);
+            // رسم الشبكة
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.05)'; ctx.lineWidth = 1; ctx.beginPath();
+            for(let i=0; i<width; i+=60) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
+            for(let i=0; i<height; i+=60) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
+            ctx.stroke();
+
+            drawHouse();
 
             // رسم الجزيئات
             for(let i=particles.length-1; i>=0; i--) {
-                let p = particles[i];
-                p.x += p.vx; p.y += p.vy; p.life -= 0.05;
-                ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
-                ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
-                ctx.globalAlpha = 1;
-                if(p.life<=0) particles.splice(i,1);
+                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1; if(p.life<=0) particles.splice(i,1);
             }
 
-            // رسم عناصر التحكم باللمس (لتتأكد أنها تعمل)
+            // التحكم الموبايل
             if (input.isMobile) {
-                // رسم الجويستيك (يسار)
                 if (input.joystick.active) {
                     ctx.beginPath(); ctx.arc(input.joystick.x, input.joystick.y, 40, 0, Math.PI*2);
-                    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth=2; ctx.stroke();
-                    
-                    let knobX = input.joystick.x + input.joystick.dx * 40;
-                    let knobY = input.joystick.y + input.joystick.dy * 40;
-                    ctx.beginPath(); ctx.arc(knobX, knobY, 20, 0, Math.PI*2);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.stroke();
+                    ctx.beginPath(); ctx.arc(input.joystick.x + input.joystick.dx*40, input.joystick.y + input.joystick.dy*40, 20, 0, Math.PI*2);
                     ctx.fillStyle = 'rgba(0, 243, 255, 0.5)'; ctx.fill();
-                } else {
-                    // تلميح لمكان الجويستيك
-                    ctx.beginPath(); ctx.arc(80, height-80, 40, 0, Math.PI*2);
-                    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.stroke();
                 }
-
-                // رسم زر النار (يمين)
                 if (input.fireBtn.active) {
                     ctx.beginPath(); ctx.arc(input.fireBtn.x, input.fireBtn.y, 35, 0, Math.PI*2);
                     ctx.fillStyle = 'rgba(255, 0, 85, 0.5)'; ctx.fill();
-                } else {
-                    // تلميح لمكان زر النار
-                    ctx.beginPath(); ctx.arc(width-80, height-80, 35, 0, Math.PI*2);
-                    ctx.strokeStyle = 'rgba(255, 0, 85, 0.3)'; ctx.lineWidth=2; ctx.stroke();
                 }
             }
 
             // تحديث الكائنات
-            player.update(enemy);
-            enemy.update(player);
+            if(player) player.update({}); // اللاعب لا يطارد أحداً
             player.draw();
-            enemy.draw();
 
-            // الرصاص
+            // تحديث الأعداء
+            enemies.forEach(e => {
+                e.update(player);
+                e.draw();
+            });
+
+            // تحديث الرصاص
             for(let i=bullets.length-1; i>=0; i--) {
-                let b = bullets[i];
-                b.x += b.vx; b.y += b.vy;
-                
-                // رسم الرصاصة (شعاع)
-                ctx.strokeStyle = b.color; ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x-b.vx, b.y-b.vy); ctx.stroke();
+                let b = bullets[i]; b.x += b.vx; b.y += b.vy;
+                ctx.strokeStyle = b.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x-b.vx, b.y-b.vy); ctx.stroke();
 
                 if(b.x<0||b.x>width||b.y<0||b.y>height) { bullets.splice(i,1); continue; }
 
-                let t = b.owner === 'p' ? enemy : player;
-                if(Math.hypot(b.x-t.x, b.y-t.y) < t.radius+5) {
-                    createExplosion(t.x, t.y, b.color);
-                    if(b.owner==='p') { score.p++; document.getElementById('p-score').innerText = score.p; enemy.x=Math.random()*width; enemy.y=Math.random()*height; }
-                    else { score.e++; document.getElementById('e-score').innerText = score.e; }
-                    bullets.splice(i,1);
+                // تصادم
+                let targets = (b.owner === 'p') ? enemies : [player];
+                let hit = false;
+
+                for(let t of targets) {
+                    if(Math.hypot(b.x-t.x, b.y-t.y) < t.radius+5) {
+                        createExplosion(t.x, t.y, b.color);
+                        if(b.owner === 'p') {
+                            t.hp -= 10; // ضرر اللاعب
+                            if(t.hp <= 0) {
+                                score++; 
+                                checkProgression();
+                                if(t.type === 'boss') { // البوس مات قبل ال200؟
+                                    score += 50; // بونص
+                                    checkProgression();
+                                    t.x = -1000; // إخفاء
+                                } else {
+                                    // إعادة تدوير العدو العادي
+                                    t.x = width/2; t.y = 80; t.hp = 1; 
+                                }
+                            }
+                        } else {
+                            // العدو أصاب اللاعب (اهتزاز فقط حالياً لتبسيط اللعبة)
+                            // يمكن إضافة نظام صحة للاعب هنا
+                        }
+                        bullets.splice(i,1);
+                        hit = true; break;
+                    }
                 }
             }
+
+            // UI
+            document.getElementById('p-score').innerText = score;
+            if(bossActive && enemies.length > 0) {
+                 document.getElementById('boss-hp').innerText = enemies[0].hp + "%";
+            } else {
+                 document.getElementById('boss-hp').innerText = "---";
+            }
+
             ctx.restore();
         }
 
-        // === معالجة الأحداث (Event Handling) ===
-        
-        // 1. الموبايل (Touch)
-        // نستخدم passive: false لمنع المتصفح من التدخل
+        // مدخلات
         window.addEventListener('touchstart', e => {
-            e.preventDefault(); 
-            input.isMobile = true;
-
+            e.preventDefault(); input.isMobile = true;
             for(let i=0; i<e.changedTouches.length; i++) {
                 let t = e.changedTouches[i];
-                
-                // النصف الأيسر للشاشة = جويستيك
-                if(t.clientX < width / 2) {
-                    input.joystick.active = true;
-                    input.joystick.id = t.identifier;
-                    input.joystick.x = t.clientX;
-                    input.joystick.y = t.clientY;
-                    input.joystick.dx = 0;
-                    input.joystick.dy = 0;
-                } 
-                // النصف الأيمن للشاشة = إطلاق نار
-                else {
-                    input.fireBtn.active = true;
-                    input.fireBtn.id = t.identifier;
-                    input.fireBtn.x = t.clientX;
-                    input.fireBtn.y = t.clientY;
-                    if(gameRunning) shoot(player); // طلقة فورية عند اللمس
+                if(t.clientX < width/2) {
+                    input.joystick.active = true; input.joystick.id = t.identifier;
+                    input.joystick.x = t.clientX; input.joystick.y = t.clientY;
+                } else {
+                    input.fireBtn.active = true; input.fireBtn.id = t.identifier;
+                    input.fireBtn.x = t.clientX; input.fireBtn.y = t.clientY;
                 }
             }
-        }, { passive: false });
+        }, {passive: false});
 
         window.addEventListener('touchmove', e => {
             e.preventDefault();
             for(let i=0; i<e.changedTouches.length; i++) {
                 let t = e.changedTouches[i];
-                
-                // تحريك الجويستيك
                 if(input.joystick.active && t.identifier === input.joystick.id) {
-                    let dx = t.clientX - input.joystick.x;
-                    let dy = t.clientY - input.joystick.y;
-                    let dist = Math.min(50, Math.hypot(dx, dy)); // أقصى مسافة 50
-                    let angle = Math.atan2(dy, dx);
-                    
-                    // تطبيع القيم بين -1 و 1
-                    input.joystick.dx = (Math.cos(angle) * dist) / 50;
-                    input.joystick.dy = (Math.sin(angle) * dist) / 50;
+                    let dx = t.clientX - input.joystick.x, dy = t.clientY - input.joystick.y;
+                    let dist = Math.min(50, Math.hypot(dx, dy)); let ang = Math.atan2(dy, dx);
+                    input.joystick.dx = (Math.cos(ang)*dist)/50; input.joystick.dy = (Math.sin(ang)*dist)/50;
                 }
-                
-                // تحريك زر النار (فقط لتحديث المكان البصري)
                 if(input.fireBtn.active && t.identifier === input.fireBtn.id) {
-                    input.fireBtn.x = t.clientX;
-                    input.fireBtn.y = t.clientY;
+                    input.fireBtn.x = t.clientX; input.fireBtn.y = t.clientY;
                 }
             }
-        }, { passive: false });
+        }, {passive: false});
 
         window.addEventListener('touchend', e => {
             e.preventDefault();
             for(let i=0; i<e.changedTouches.length; i++) {
-                let t = e.changedTouches[i];
-                if(t.identifier === input.joystick.id) {
-                    input.joystick.active = false;
-                    input.joystick.dx = 0; input.joystick.dy = 0;
+                if(e.changedTouches[i].identifier === input.joystick.id) {
+                    input.joystick.active = false; input.joystick.dx = 0; input.joystick.dy = 0;
                 }
-                if(t.identifier === input.fireBtn.id) {
-                    input.fireBtn.active = false;
-                }
+                if(e.changedTouches[i].identifier === input.fireBtn.id) input.fireBtn.active = false;
             }
-        }, { passive: false });
+        }, {passive: false});
 
-        // 2. الكمبيوتر (Keyboard & Mouse)
         window.addEventListener('keydown', e => {
-            let k = e.key.toLowerCase();
-            if(k==='w') input.keys.w=true; if(k==='s') input.keys.s=true;
-            if(k==='a') input.keys.a=true; if(k==='d') input.keys.d=true;
+            let k=e.key.toLowerCase(); if(k==='w')input.keys.w=true; if(k==='s')input.keys.s=true; if(k==='a')input.keys.a=true; if(k==='d')input.keys.d=true;
         });
         window.addEventListener('keyup', e => {
-            let k = e.key.toLowerCase();
-            if(k==='w') input.keys.w=false; if(k==='s') input.keys.s=false;
-            if(k==='a') input.keys.a=false; if(k==='d') input.keys.d=false;
+            let k=e.key.toLowerCase(); if(k==='w')input.keys.w=false; if(k==='s')input.keys.s=false; if(k==='a')input.keys.a=false; if(k==='d')input.keys.d=false;
         });
-        window.addEventListener('mousemove', e => {
-            input.mouse.x = e.clientX; input.mouse.y = e.clientY;
-        });
+        window.addEventListener('mousemove', e => { input.mouse.x = e.clientX; input.mouse.y = e.clientY; });
         window.addEventListener('mousedown', () => input.mouse.down = true);
         window.addEventListener('mouseup', () => input.mouse.down = false);
 
