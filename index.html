@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ساحة الألوان: Paintball Arena</title>
+    <style>
+        /* إعدادات الصفحة لتناسب الهواتف */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #2c3e50; /* لون أرضية خارج الملعب */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* منع التكبير والتصغير باللمس */
+        }
+
+        /* مساحة اللعب */
+        canvas {
+            display: block;
+            background-color: #4b6cb7; /* لون أرضية الملعب */
+        }
+
+        /* واجهة المستخدم (UI) */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* شاشة البداية */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        h1 { margin: 0 0 20px 0; color: #f1c40f; text-shadow: 2px 2px #000; font-size: 3rem; }
+        p { font-size: 1.2rem; text-align: center; max-width: 80%; }
+        
+        .btn {
+            padding: 15px 40px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px #c0392b;
+            margin-top: 20px;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: 0 0 #c0392b; }
+
+        /* أزرار التحكم للموبايل */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            pointer-events: auto;
+            z-index: 5;
+        }
+
+        /* عصا التحكم (اليسار) */
+        #joystick-zone {
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #joystick-knob {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            position: relative;
+        }
+
+        /* زر الإطلاق (اليمين) */
+        #shoot-btn {
+            right: 20px;
+            width: 90px;
+            height: 90px;
+            background: rgba(231, 76, 60, 0.6);
+            border-radius: 50%;
+            border: 4px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            user-select: none;
+        }
+        #shoot-btn:active { background: rgba(231, 76, 60, 0.9); }
+
+        /* عداد النتيجة */
+        #score-board {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: white;
+            font-size: 1.2rem;
+            display: flex;
+            gap: 20px;
+        }
+        .score-blue { color: #3498db; font-weight: bold; }
+        .score-red { color: #e74c3c; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <!-- شاشة البداية -->
+        <div id="start-screen">
+            <h1>🎨 Splat Arena</h1>
+            <p>لعبة البينتبول للأجهزة الخفيفة.<br>تحكم بالحركة من اليسار، واطلق النار من اليمين.</p>
+            <button class="btn" onclick="startGame()">ابدأ اللعب</button>
+        </div>
+
+        <!-- لوحة النتائج -->
+        <div id="score-board" style="display:none;">
+            <span class="score-blue">أنت: <span id="p-score">0</span></span>
+            <span>|</span>
+            <span class="score-red">الخصم: <span id="e-score">0</span></span>
+        </div>
+
+        <!-- أزرار التحكم -->
+        <div class="controls" id="joystick-zone" style="display:none;">
+            <div id="joystick-knob"></div>
+        </div>
+        <div class="controls" id="shoot-btn" style="display:none;">NAR</div>
+    </div>
+
+    <script>
+        // --- إعدادات اللعبة ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // ضبط حجم الشاشة
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // متغيرات اللعبة
+        let gameRunning = false;
+        let lastTime = 0;
+        let bullets = [];
+        let splats = []; // بقع الطلاء
+        let obstacles = [];
+        let particles = []; // تأثير الانفجار الصغير
+        let score = { player: 0, enemy: 0 };
+
+        // الكائن الأساسي
+        class Entity {
+            constructor(x, y, color, radius) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = radius;
+                this.angle = 0;
+                this.speed = 0;
+                this.isDead = false;
+            }
+        }
+
+        // اللاعب
+        class Player extends Entity {
+            constructor(x, y) {
+                super(x, y, '#3498db', 20); // أزرق
+                this.maxSpeed = 4;
+            }
+            update(dx, dy) {
+                this.x += dx * this.maxSpeed;
+                this.y += dy * this.maxSpeed;
+                
+                // حدود الخريطة
+                this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+
+                // حساب زاوية الدوران (ينظر دائمًا لأقرب عدو أو للحركة)
+                if (dx !== 0 || dy !== 0) {
+                    this.angle = Math.atan2(dy, dx);
+                }
+            }
+            draw() {
+                drawCharacter(this.x, this.y, this.radius, this.color, this.angle, true);
+            }
+        }
+
+        // العدو (AI بسيط)
+        class Enemy extends Entity {
+            constructor(x, y) {
+                super(x, y, '#e74c3c', 20); // أحمر
+                this.moveTimer = 0;
+                this.moveDir = { x: 0, y: 0 };
+                this.shootTimer = 0;
+            }
+            update(target) {
+                // حركة عشوائية مع تتبع بسيط
+                this.moveTimer++;
+                if (this.moveTimer > 60) { // تغيير الاتجاه كل ثانية تقريباً
+                    this.moveTimer = 0;
+                    let angleToPlayer = Math.atan2(target.y - this.y, target.x - this.x);
+                    // 50% يلحق اللاعب، 50% يتحرك عشوائي
+                    if (Math.random() > 0.5) {
+                        this.moveDir.x = Math.cos(angleToPlayer);
+                        this.moveDir.y = Math.sin(angleToPlayer);
+                    } else {
+                        this.moveDir.x = (Math.random() - 0.5) * 2;
+                        this.moveDir.y = (Math.random() - 0.5) * 2;
+                    }
+                }
+
+                this.x += this.moveDir.x * 2;
+                this.y += this.moveDir.y * 2;
+
+                // حدود الخريطة
+                this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+
+                // التصويب نحو اللاعب
+                this.angle = Math.atan2(target.y - this.y, target.x - this.x);
+
+                // إطلاق النار
+                this.shootTimer++;
+                if (this.shootTimer > 100) { // يطلق كل ثانية ونصف
+                    this.shootTimer = 0;
+                    shootBullet(this, 'red');
+                }
+            }
+            draw() {
+                drawCharacter(this.x, this.y, this.radius, this.color, this.angle, false);
+            }
+        }
+
+        // الحكم (Referee)
+        class Referee extends Entity {
+            constructor() {
+                super(canvas.width / 2, canvas.height / 2, '#fff', 18);
+                this.timer = 0;
+            }
+            update() {
+                this.timer += 0.02;
+                this.x = (canvas.width / 2) + Math.sin(this.timer) * 100;
+                this.y = (canvas.height / 2) + Math.cos(this.timer * 0.5) * 50;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                // رسم خطوط الحكم
+                ctx.beginPath();
+                for(let i=-this.radius; i<this.radius; i+=6) {
+                    ctx.rect(i, -this.radius, 3, this.radius*2);
+                }
+                ctx.fillStyle = '#000';
+                ctx.clip(); 
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // الرصاصة
+        class Bullet {
+            constructor(x, y, angle, ownerColor) {
+                this.x = x;
+                this.y = y;
+                this.speed = 8;
+                this.vx = Math.cos(angle) * this.speed;
+                this.vy = Math.sin(angle) * this.speed;
+                this.color = ownerColor === '#3498db' ? '#00ffff' : '#ffaaaa'; // ألوان فاتحة للرصاص
+                this.radius = 5;
+                this.active = true;
+                this.ownerColor = ownerColor; // لمعرفة من أطلقها
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // التحقق من الخروج من الشاشة
+                if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+                    this.active = false;
+                }
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        // تهيئة الكائنات
+        let player;
+        let enemy;
+        let referee;
+
+        // --- دوال الرسم والمساعدة ---
+
+        function drawCharacter(x, y, r, color, angle, isPlayer) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            // الجسم
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // الماركر (المسدس)
+            ctx.fillStyle = '#333';
+            ctx.fillRect(r - 5, -5, 20, 10); // شكل المسدس
+            ctx.fillStyle = 'orange'; // فوهة
+            ctx.fillRect(r + 15, -5, 4, 10);
+
+            // الخوذة (visor)
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.ellipse(5, 0, 8, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // دائرة تحت اللاعب للإشارة
+            if(isPlayer) {
+                ctx.beginPath();
+                ctx.arc(x, y, r + 5, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        function createSplat(x, y, color) {
+            // تحسين الأداء: الاحتفاظ بـ 30 بقعة فقط
+            if (splats.length > 30) splats.shift();
+            
+            let splatCount = 5 + Math.random() * 5;
+            let splatGroup = [];
+            for(let i=0; i<splatCount; i++) {
+                splatGroup.push({
+                    ox: (Math.random() - 0.5) * 20,
+                    oy: (Math.random() - 0.5) * 20,
+                    size: 2 + Math.random() * 5
+                });
+            }
+            splats.push({ x, y, color, shapes: splatGroup, alpha: 1.0 });
+        }
+
+        function drawSplats() {
+            for (let s of splats) {
+                ctx.globalAlpha = s.alpha;
+                ctx.fillStyle = s.color;
+                for (let shape of s.shapes) {
+                    ctx.beginPath();
+                    ctx.arc(s.x + shape.ox, s.y + shape.oy, shape.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                s.alpha -= 0.0005; // تتلاشى ببطء
+            }
+            ctx.globalAlpha = 1.0;
+            // تنظيف البقع المختفية
+            splats = splats.filter(s => s.alpha > 0);
+        }
+
+        function shootBullet(shooter, team) {
+            let spread = (Math.random() - 0.5) * 0.2; // قليل من عدم الدقة للواقعية
+            bullets.push(new Bullet(shooter.x, shooter.y, shooter.angle + spread, shooter.color));
+        }
+
+        // --- منطق التحكم (Joystick) ---
+        let joystick = { active: false, dx: 0, dy: 0, originX: 0, originY: 0 };
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickKnob = document.getElementById('joystick-knob');
+
+        joystickZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            let touch = e.changedTouches[0];
+            joystick.active = true;
+            joystick.originX = touch.clientX;
+            joystick.originY = touch.clientY;
+            joystickKnob.style.transition = 'none';
+        }, {passive: false});
+
+        joystickZone.addEventListener('touchmove', (e) => {
+            if (!joystick.active) return;
+            e.preventDefault();
+            let touch = e.changedTouches[0];
+            let dx = touch.clientX - joystick.originX;
+            let dy = touch.clientY - joystick.originY;
+            
+            // تحديد مسافة السحب
+            let distance = Math.min(40, Math.sqrt(dx*dx + dy*dy));
+            let angle = Math.atan2(dy, dx);
+            
+            // تحريك المقبض بصرياً
+            let moveX = Math.cos(angle) * distance;
+            let moveY = Math.sin(angle) * distance;
+            joystickKnob.style.transform = `translate(${moveX}px, ${moveY}px)`;
+
+            // تحديث قيم الحركة للاعب (تطبيع القيم بين -1 و 1)
+            joystick.dx = moveX / 40;
+            joystick.dy = moveY / 40;
+        }, {passive: false});
+
+        joystickZone.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            joystick.active = false;
+            joystick.dx = 0;
+            joystick.dy = 0;
+            joystickKnob.style.transform = `translate(0px, 0px)`;
+            joystickKnob.style.transition = '0.2s';
+        });
+
+        // زر الإطلاق
+        document.getElementById('shoot-btn').addEventListener('touchstart', (e) => {
+            e.preventDefault(); 
+            if(gameRunning) shootBullet(player, 'blue');
+        });
+
+        // دعم الكيبورد للتجربة على الكمبيوتر
+        let keys = {};
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+        window.addEventListener('keypress', e => {
+            if(e.key === ' ' && gameRunning) shootBullet(player, 'blue');
+        });
+
+        // --- حلقة اللعبة (Game Loop) ---
+        function init() {
+            player = new Player(100, canvas.height / 2);
+            enemy = new Enemy(canvas.width - 100, canvas.height / 2);
+            referee = new Referee();
+            bullets = [];
+            splats = [];
+            score = { player: 0, enemy: 0 };
+            updateScore();
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('score-board').style.display = 'flex';
+            document.getElementById('joystick-zone').style.display = 'flex';
+            document.getElementById('shoot-btn').style.display = 'flex';
+            init();
+            gameRunning = true;
+            loop();
+        }
+
+        function updateScore() {
+            document.getElementById('p-score').innerText = score.player;
+            document.getElementById('e-score').innerText = score.enemy;
+        }
+
+        function respawn(entity) {
+            entity.x = Math.random() * (canvas.width - 100) + 50;
+            entity.y = Math.random() * (canvas.height - 100) + 50;
+        }
+
+        function loop() {
+            if (!gameRunning) return;
+            requestAnimationFrame(loop);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. رسم الأرضية (Splats)
+            drawSplats();
+
+            // 2. تحديث ورسم الحكم
+            referee.update();
+            referee.draw();
+
+            // 3. تحديث اللاعب
+            let moveX = joystick.dx;
+            let moveY = joystick.dy;
+            // دعم لوحة المفاتيح
+            if(keys['ArrowUp'] || keys['w']) moveY = -1;
+            if(keys['ArrowDown'] || keys['s']) moveY = 1;
+            if(keys['ArrowLeft'] || keys['a']) moveX = -1;
+            if(keys['ArrowRight'] || keys['d']) moveX = 1;
+
+            player.update(moveX, moveY);
+            player.draw();
+
+            // 4. تحديث العدو
+            enemy.update(player);
+            enemy.draw();
+
+            // 5. تحديث الرصاص والتصادم
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                b.update();
+                b.draw();
+
+                // تصادم مع اللاعب
+                let dxP = b.x - player.x;
+                let dyP = b.y - player.y;
+                if (b.ownerColor !== player.color && Math.sqrt(dxP*dxP + dyP*dyP) < player.radius + b.radius) {
+                    createSplat(player.x, player.y, b.color);
+                    score.enemy++;
+                    updateScore();
+                    respawn(player); // إعادة إحياء اللاعب
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                // تصادم مع العدو
+                let dxE = b.x - enemy.x;
+                let dyE = b.y - enemy.y;
+                if (b.ownerColor !== enemy.color && Math.sqrt(dxE*dxE + dyE*dyE) < enemy.radius + b.radius) {
+                    createSplat(enemy.x, enemy.y, b.color);
+                    score.player++;
+                    updateScore();
+                    respawn(enemy); // إعادة إحياء العدو
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // حذف الرصاص القديم
+                if (!b.active) bullets.splice(i, 1);
+            }
+        }
+
+    </script>
+</body>
+</html>
