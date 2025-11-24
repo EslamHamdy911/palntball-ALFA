@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEON WARS: Final Fix</title>
+    <title>NEON WARS: Survival</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        /* إعدادات الشاشة واللمس */
         * { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; outline: none; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Orbitron', sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -21,7 +22,7 @@
         }
         
         h1 { color: #00f3ff; text-shadow: 0 0 20px #00f3ff; font-size: 35px; margin: 0; text-align: center;}
-        p { color: #aaa; margin-top: 5px; font-size: 12px; }
+        p { color: #aaa; margin-top: 5px; font-size: 14px; }
 
         .btn {
             background: rgba(0, 243, 255, 0.1); border: 2px solid #00f3ff; color: #00f3ff;
@@ -31,9 +32,17 @@
         }
         .btn:active { background: #00f3ff; color: #000; transform: scale(0.95); }
 
+        /* شاشة الخسارة */
+        #game-over-screen {
+            background: rgba(20, 0, 0, 0.95);
+            display: none;
+        }
+        #game-over-screen h1 { color: #ff0000; text-shadow: 0 0 30px #ff0000; font-size: 50px; }
+        .btn-red { border-color: #ff0000; color: #ff0000; box-shadow: 0 0 15px #ff0000; background: rgba(255, 0, 0, 0.1); }
+
         /* زر الغضب */
         #rage-btn {
-            position: absolute; bottom: 50px; right: 20px; /* تم تعديل المكان */
+            position: absolute; bottom: 50px; right: 20px;
             width: 90px; height: 90px; border-radius: 50%;
             background: radial-gradient(circle, #ff5500, #550000);
             border: 4px solid #ffaa00;
@@ -42,7 +51,7 @@
             justify-content: center; align-items: center;
             box-shadow: 0 0 20px #ff5500;
             animation: pulseRage 0.5s infinite alternate;
-            pointer-events: auto; cursor: pointer; z-index: 200; /* رفع الطبقة */
+            pointer-events: auto; cursor: pointer; z-index: 200;
         }
         @keyframes pulseRage { from { transform: scale(1); box-shadow: 0 0 20px #ff5500; } to { transform: scale(1.1); box-shadow: 0 0 40px #ff5500; } }
 
@@ -56,27 +65,27 @@
 
     <div id="start-screen" class="screen">
         <h1>NEON WARS</h1>
-        <p>SYSTEM REBOOTED</p>
+        <p>SURVIVAL MODE</p>
         <button class="btn" onclick="startGame()">START</button>
-        <p style="margin-top: 20px; font-size: 10px; color: #666;">MOVE TO SHOOT</p>
+        <p style="margin-top: 20px; font-size: 10px; color: #666;">KILL 10 TO HEAL</p>
     </div>
 
-    <div id="win-screen" class="screen" style="display:none;">
-        <h1 style="color:#f1c40f">VICTORY</h1>
-        <button class="btn" onclick="location.reload()">RESTART</button>
+    <!-- شاشة الخسارة -->
+    <div id="game-over-screen" class="screen">
+        <h1>GAME OVER</h1>
+        <p>SCORE: <span id="final-score">0</span></p>
+        <button class="btn btn-red" onclick="location.reload()">TRY AGAIN</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
         <div id="hud">
-            <div style="color:#00f3ff">SCORE: <span id="p-score">0</span></div>
+            <div style="color:#00f3ff">KILLS: <span id="p-score">0</span></div>
             <div style="color:#ff0055">HP: <span id="p-hp">100</span>%</div>
         </div>
         <div id="wave-msg">WARNING</div>
         <div id="rage-timer">RAGE: <span id="r-time">0</span>%</div>
-        
-        <!-- زر الغضب -->
         <div id="rage-btn">RAGE!</div>
     </div>
 
@@ -93,15 +102,15 @@
 
         let gameRunning = false;
         let score = 0;
+        let killCounterForHeal = 0; // عداد للشفاء
         let frame = 0;
         
         let enemies = [], bullets = [], particles = [];
         let player;
         let shake = 0;
         
-        let bossPhase = 0; // 0:بداية, 1:وحش1, 2:توأم, 3:زومبي
-        
-        let rageCharge = 0;
+        let bossPhase = 0; 
+        let rageCharge = 100;
         let isRageActive = false;
         let rageDuration = 0;
 
@@ -119,13 +128,14 @@
                 this.angle = 0;
                 
                 if(type === 'player') {
-                    this.radius = 15; this.color = '#00f3ff'; this.speed = 4; this.hp = 200; this.maxHp = 200;
+                    this.radius = 15; this.color = '#00f3ff'; this.speed = 4; 
+                    this.hp = 100; this.maxHp = 100; // صحة اللاعب
                 } else if (type === 'boss') {
                     this.radius = 40; this.color = '#f1c40f'; this.speed = 1.5; this.hp = 500; this.maxHp = 500;
                 } else if (type === 'zombie') {
                     this.radius = 15; this.color = '#00ff00'; this.speed = 5; this.hp = 20;
                 } else { 
-                    this.radius = 15; this.color = '#ff0055'; this.speed = 2.5; this.hp = 30;
+                    this.radius = 15; this.color = '#ff0055'; this.speed = 2.5; this.hp = 40;
                 }
             }
 
@@ -134,7 +144,6 @@
                 if (this.type === 'player') {
                     if (input.active) {
                         dx = input.dx; dy = input.dy;
-                        // Auto-Aim logic
                         let nearest = null; let minDst = 9999;
                         enemies.forEach(e => {
                             let d = Math.hypot(e.x - this.x, e.y - this.y);
@@ -156,7 +165,9 @@
                     if(this.type === 'zombie') {
                         dx = Math.cos(this.angle); dy = Math.sin(this.angle);
                         if(dist < this.radius + target.radius) {
-                            player.hp -= 0.5; createExplosion(this.x, this.y, '#f00', 1);
+                            player.hp -= 0.5; // ضرر مستمر
+                            createExplosion(this.x, this.y, '#f00', 1);
+                            checkGameOver(); // فحص الموت
                         }
                     } else {
                         let stopDist = (this.type === 'boss') ? 250 : 150;
@@ -199,8 +210,8 @@
             }
         }
 
-        function spawnEnemy(type = 'enemy', xOffset = 0) {
-            let startX = width/2 + xOffset;
+        function spawnEnemy(type = 'enemy') {
+            let startX = width/2;
             let startY = -50;
             if(type === 'zombie') {
                 startX = Math.random() < 0.5 ? -20 : width+20;
@@ -241,52 +252,53 @@
             let el = document.getElementById('wave-msg'); el.innerText = text; el.style.opacity = 1; setTimeout(() => el.style.opacity = 0, 3000);
         }
 
-        // --- إدارة اللعبة والتأكد من عدم فراغ الشاشة ---
+        // --- نظام التعبئة اللانهائي (Infinite Spawning) ---
         function maintainEnemies() {
-            // إذا كنا في معركة وحش، لا تضف أعداء عاديين
             if(bossPhase === 1 || bossPhase === 2) return;
 
-            let targetCount = 3 + Math.floor(score/50); // يزيد العدد مع النقاط
+            // كلما زادت النقاط، زاد عدد الأعداء المسموح به
+            let maxEnemies = 4 + Math.floor(score / 50); 
             
-            // إذا قل العدد عن المطلوب، أضف عدواً
-            if(enemies.length < targetCount) {
-                // استدعاء فوري إذا الشاشة فارغة تماماً
+            if(enemies.length < maxEnemies) {
                 if(enemies.length === 0) {
                     spawnEnemy(bossPhase === 3 ? 'zombie' : 'enemy');
-                } 
-                // احتمالية استدعاء في كل فريم (لتعبئة الشاشة تدريجياً)
-                else if(Math.random() < 0.05) {
+                } else if(Math.random() < 0.05) {
                     spawnEnemy(bossPhase === 3 ? 'zombie' : 'enemy');
                 }
             }
         }
 
         function checkProgression() {
-            // المرحلة 1: وحش 1 عند 100 نقطة
+            // مراحل الوحوش (تبقى كما هي لإضافة التحدي)
             if(score >= 100 && bossPhase === 0) {
                 bossPhase = 1; showMsg("⚠️ BOSS DETECTED ⚠️");
                 enemies = []; setTimeout(() => spawnEnemy('boss'), 1000);
             }
-            // المرحلة 2: التوأم بعد موت الوحش الأول
             else if(bossPhase === 1 && enemies.length === 0) {
                 bossPhase = 2; showMsg("⚠️ THE TWINS ⚠️");
-                setTimeout(() => { spawnEnemy('boss', -60); spawnEnemy('boss', 60); }, 2000);
+                setTimeout(() => { spawnEnemy('boss'); spawnEnemy('boss'); }, 2000);
             }
-            // المرحلة 3: الزومبي بعد موت التوأم
             else if(bossPhase === 2 && enemies.length === 0 && score > 200) {
-                bossPhase = 3; showMsg("☣️ ZOMBIE HORDE ☣️");
+                bossPhase = 3; showMsg("☣️ ENDLESS ZOMBIE HORDE ☣️");
             }
         }
 
-        // --- Rage System ---
+        function checkGameOver() {
+            if (player.hp <= 0) {
+                player.hp = 0;
+                gameRunning = false;
+                document.getElementById('final-score').innerText = score;
+                document.getElementById('game-over-screen').style.display = 'flex';
+                document.getElementById('ui-layer').style.display = 'none';
+            }
+        }
+
+        // --- Rage ---
         function activateRage() {
-            isRageActive = true;
-            rageDuration = 600; 
-            rageCharge = 0;
+            isRageActive = true; rageDuration = 600; rageCharge = 0;
             document.getElementById('rage-btn').style.display = 'none';
             showMsg("🔥🔥 RAGE UNLEASHED 🔥🔥");
             createExplosion(player.x, player.y, '#ff4400', 50);
-            // استدعاء فوري لزومبي
             for(let i=0; i<6; i++) setTimeout(() => spawnEnemy('zombie'), i*300);
         }
 
@@ -295,7 +307,7 @@
                 rageDuration--;
                 if(rageDuration <= 0) { isRageActive = false; }
             } else {
-                if(rageCharge < 100) rageCharge += (100 / 1800); // يشحن في 30 ثانية
+                if(rageCharge < 100) rageCharge += (100 / 1800);
                 document.getElementById('r-time').innerText = Math.floor(rageCharge);
                 if(rageCharge >= 100) document.getElementById('rage-btn').style.display = 'flex';
             }
@@ -304,7 +316,8 @@
         function startGame() {
             document.getElementById('start-screen').style.display = 'none';
             player = new Agent(width/2, height-100, 'player');
-            enemies = []; bullets = []; score = 0; bossPhase = 0; rageCharge = 100; // ابدأ بشحن كامل للتجربة
+            enemies = []; bullets = []; score = 0; killCounterForHeal = 0; 
+            bossPhase = 0; rageCharge = 100;
             gameRunning = true; 
             spawnEnemy(); 
             loop();
@@ -323,7 +336,7 @@
             ctx.stroke();
 
             updateRage();
-            maintainEnemies(); // التأكد المستمر من وجود أعداء
+            maintainEnemies();
 
             for(let i=particles.length-1; i>=0; i--) {
                 let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
@@ -346,14 +359,24 @@
                         if(b.owner === 'p') {
                             t.hp -= b.damage;
                             if(t.hp <= 0) {
-                                score += (t.type==='boss'?50:5); 
+                                score += (t.type==='boss'?50:1); 
+                                
+                                // --- نظام الشفاء ---
+                                killCounterForHeal++;
+                                if(killCounterForHeal >= 10) {
+                                    killCounterForHeal = 0;
+                                    player.hp = Math.min(player.hp + 25, player.maxHp); // شفاء 25%
+                                    showMsg("❤️ HP RECOVERED ❤️");
+                                }
+                                // -------------------
+
                                 createExplosion(t.x, t.y, '#fff', 10);
                                 enemies = enemies.filter(e => e !== t);
                                 checkProgression();
                             }
                         } else {
-                            player.hp -= 2; shake = 5;
-                            if(player.hp <= 0) location.reload();
+                            player.hp -= 3; shake = 5; // ضرر اللاعب
+                            checkGameOver(); // فحص الموت
                         }
                         bullets.splice(i,1); break;
                     }
@@ -373,18 +396,11 @@
             ctx.restore();
         }
 
-        // --- Rage Button Listener ---
+        // --- التحكم ---
         const rageBtn = document.getElementById('rage-btn');
-        rageBtn.addEventListener('touchstart', (e) => {
-            e.stopPropagation(); // منع انتقال اللمس للعبة
-            activateRage();
-        });
-        rageBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            activateRage();
-        });
+        rageBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); activateRage(); });
+        rageBtn.addEventListener('click', (e) => { e.stopPropagation(); activateRage(); });
 
-        // --- Joystick Logic ---
         window.addEventListener('touchstart', e => {
             if(e.target.tagName === 'BUTTON' || e.target.id === 'rage-btn') return;
             e.preventDefault();
@@ -394,6 +410,7 @@
                 input.id = t.identifier;
                 input.startX = t.clientX; input.startY = t.clientY;
                 input.x = t.clientX; input.y = t.clientY;
+                input.dx = 0; input.dy = 0;
             }
         }, {passive: false});
 
