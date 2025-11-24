@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEON WARS: Rage Edition</title>
+    <title>NEON WARS: Final Fix</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* إعدادات الشاشة واللمس */
         * { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; outline: none; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Orbitron', sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -34,53 +33,51 @@
 
         /* زر الغضب */
         #rage-btn {
-            position: absolute; bottom: 120px; right: 20px;
-            width: 80px; height: 80px; border-radius: 50%;
+            position: absolute; bottom: 50px; right: 20px; /* تم تعديل المكان */
+            width: 90px; height: 90px; border-radius: 50%;
             background: radial-gradient(circle, #ff5500, #550000);
-            border: 3px solid #ffaa00;
-            color: #fff; font-weight: bold; font-size: 14px;
-            display: none; /* مخفي في البداية */
+            border: 4px solid #ffaa00;
+            color: #fff; font-weight: bold; font-size: 16px;
+            display: none; 
             justify-content: center; align-items: center;
             box-shadow: 0 0 20px #ff5500;
             animation: pulseRage 0.5s infinite alternate;
-            pointer-events: auto; cursor: pointer; z-index: 50;
+            pointer-events: auto; cursor: pointer; z-index: 200; /* رفع الطبقة */
         }
         @keyframes pulseRage { from { transform: scale(1); box-shadow: 0 0 20px #ff5500; } to { transform: scale(1.1); box-shadow: 0 0 40px #ff5500; } }
 
         #hud { padding: 15px; display: flex; justify-content: space-between; width: 90%; margin: 0 auto; text-shadow: 0 2px 5px rgba(0,0,0,0.8); font-size: 16px; font-weight: bold; }
         #wave-msg { position: absolute; top: 15%; width: 100%; text-align: center; color: #f1c40f; font-size: 24px; font-weight: bold; opacity: 0; transition: opacity 0.5s; text-shadow: 0 0 10px #f00; }
         
-        /* مؤقت الغضب */
-        #rage-timer { position: absolute; top: 60px; right: 20px; color: #555; font-size: 12px; }
+        #rage-timer { position: absolute; top: 60px; right: 20px; color: #ff5500; font-size: 14px; font-weight: bold;}
     </style>
 </head>
 <body>
 
     <div id="start-screen" class="screen">
         <h1>NEON WARS</h1>
-        <p>AUTO-FIRE EDITION</p>
-        <button class="btn" onclick="startGame()">DEPLOY</button>
-        <p style="margin-top: 20px; font-size: 10px; color: #666;">DRAG TO MOVE & AUTO-SHOOT</p>
+        <p>SYSTEM REBOOTED</p>
+        <button class="btn" onclick="startGame()">START</button>
+        <p style="margin-top: 20px; font-size: 10px; color: #666;">MOVE TO SHOOT</p>
     </div>
 
     <div id="win-screen" class="screen" style="display:none;">
-        <h1 style="color:#f1c40f">LEGENDARY!</h1>
-        <p>YOU SURVIVED THE HORDE</p>
-        <button class="btn" onclick="location.reload()">REPLAY</button>
+        <h1 style="color:#f1c40f">VICTORY</h1>
+        <button class="btn" onclick="location.reload()">RESTART</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
         <div id="hud">
-            <div style="color:#00f3ff">KILLS: <span id="p-score">0</span></div>
+            <div style="color:#00f3ff">SCORE: <span id="p-score">0</span></div>
             <div style="color:#ff0055">HP: <span id="p-hp">100</span>%</div>
         </div>
         <div id="wave-msg">WARNING</div>
         <div id="rage-timer">RAGE: <span id="r-time">0</span>%</div>
         
         <!-- زر الغضب -->
-        <div id="rage-btn" onclick="activateRage()">RAGE<br>READY</div>
+        <div id="rage-btn">RAGE!</div>
     </div>
 
     <script>
@@ -94,7 +91,6 @@
         }
         window.addEventListener('resize', resize); resize();
 
-        // المتغيرات
         let gameRunning = false;
         let score = 0;
         let frame = 0;
@@ -103,15 +99,12 @@
         let player;
         let shake = 0;
         
-        // نظام المراحل
         let bossPhase = 0; // 0:بداية, 1:وحش1, 2:توأم, 3:زومبي
         
-        // نظام الغضب
-        let rageCharge = 0; // 0 الى 100
+        let rageCharge = 0;
         let isRageActive = false;
         let rageDuration = 0;
 
-        // المدخلات (عصا واحدة فقط)
         const input = {
             active: false,
             startX: 0, startY: 0,
@@ -120,100 +113,66 @@
             id: null
         };
 
-        // --- الكائنات ---
         class Agent {
             constructor(x, y, type) {
                 this.x = x; this.y = y; this.type = type; 
                 this.angle = 0;
                 
-                // تم تصغير الأحجام لإعطاء مساحة أكبر (تأثير رفع الكاميرا)
                 if(type === 'player') {
-                    this.radius = 15; // أصغر
-                    this.color = '#00f3ff'; 
-                    this.speed = 4; 
-                    this.hp = 200; // صحة أعلى للاعب (لإبطاء اللعب)
-                    this.maxHp = 200;
+                    this.radius = 15; this.color = '#00f3ff'; this.speed = 4; this.hp = 200; this.maxHp = 200;
                 } else if (type === 'boss') {
-                    this.radius = 40; 
-                    this.color = '#f1c40f'; 
-                    this.speed = 1.5; // أبطأ
-                    this.hp = 500; // صحة عالية جداً للوحش
-                    this.maxHp = 500;
+                    this.radius = 40; this.color = '#f1c40f'; this.speed = 1.5; this.hp = 500; this.maxHp = 500;
                 } else if (type === 'zombie') {
-                    this.radius = 15;
-                    this.color = '#00ff00'; // زومبي أخضر
-                    this.speed = 5; // سريع جداً
-                    this.hp = 20; // ضعيف
-                } else { // enemy عادى
-                    this.radius = 15; 
-                    this.color = '#ff0055'; 
-                    this.speed = 2.5; 
-                    this.hp = 40; // صحة متوسطة
+                    this.radius = 15; this.color = '#00ff00'; this.speed = 5; this.hp = 20;
+                } else { 
+                    this.radius = 15; this.color = '#ff0055'; this.speed = 2.5; this.hp = 30;
                 }
             }
 
             update() {
                 let dx=0, dy=0;
-                
                 if (this.type === 'player') {
-                    // حركة اللاعب
                     if (input.active) {
                         dx = input.dx; dy = input.dy;
-                        
-                        // التصويب التلقائي (Auto-Aim)
-                        // يبحث عن أقرب عدو
-                        let nearest = null;
-                        let minDst = 9999;
+                        // Auto-Aim logic
+                        let nearest = null; let minDst = 9999;
                         enemies.forEach(e => {
                             let d = Math.hypot(e.x - this.x, e.y - this.y);
                             if(d < minDst) { minDst = d; nearest = e; }
                         });
-
-                        if(nearest && minDst < 400) {
-                            // صوب نحو العدو
+                        if(nearest && minDst < 500) {
                             this.angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
                         } else if (dx || dy) {
-                            // إذا لا يوجد عدو، صوب للأمام
                             this.angle = Math.atan2(dy, dx);
                         }
-
-                        // إطلاق نار تلقائي عند الحركة
-                        let rate = isRageActive ? 5 : 15; // سريع جداً في الغضب
+                        let rate = isRageActive ? 5 : 12; 
                         if(frame % rate === 0) shoot(this);
                     }
                 } else {
-                    // ذكاء الأعداء (يطاردون اللاعب)
                     let target = player;
                     let dist = Math.hypot(target.x - this.x, target.y - this.y);
                     this.angle = Math.atan2(target.y - this.y, target.x - this.x);
 
                     if(this.type === 'zombie') {
-                        // الزومبي يركض مباشرة نحو اللاعب لضربه
                         dx = Math.cos(this.angle); dy = Math.sin(this.angle);
-                        // ضرر الزومبي عند التلامس
                         if(dist < this.radius + target.radius) {
-                            player.hp -= 0.5; // ضرر مستمر عند التلامس
-                            createExplosion(this.x, this.y, '#f00', 2);
+                            player.hp -= 0.5; createExplosion(this.x, this.y, '#f00', 1);
                         }
                     } else {
-                        // الأعداء العاديين يطلقون النار ويبتعدون قليلاً
                         let stopDist = (this.type === 'boss') ? 250 : 150;
                         if(dist > stopDist) { dx = Math.cos(this.angle); dy = Math.sin(this.angle); }
                         else if(dist < stopDist - 50) { dx = -Math.cos(this.angle); dy = -Math.sin(this.angle); }
+                        
+                        enemies.forEach(other => {
+                            if(other !== this && Math.hypot(this.x - other.x, this.y - other.y) < this.radius + other.radius) {
+                                dx += (this.x - other.x) * 0.05; dy += (this.y - other.y) * 0.05;
+                            }
+                        });
 
-                        // إطلاق نار
-                        let shootProb = (this.type === 'boss') ? 0.03 : 0.01; // قللنا احتمالية الإطلاق
+                        let shootProb = (this.type === 'boss') ? 0.03 : 0.02;
                         if(Math.random() < shootProb) shoot(this);
                     }
-
-                    // منع تداخل الوحوش
-                    enemies.forEach(other => {
-                        if(other !== this && Math.hypot(this.x - other.x, this.y - other.y) < this.radius + other.radius) {
-                            dx += (this.x - other.x) * 0.05; dy += (this.y - other.y) * 0.05;
-                        }
-                    });
                 }
-
                 this.x += dx * this.speed; this.y += dy * this.speed;
                 this.x = Math.max(20, Math.min(width-20, this.x));
                 this.y = Math.max(20, Math.min(height-20, this.y));
@@ -221,31 +180,19 @@
 
             draw() {
                 ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
-                
-                // لون الغضب للاعب
                 let drawColor = (this.type === 'player' && isRageActive) ? '#ff4400' : this.color;
-                
                 ctx.shadowBlur = 10; ctx.shadowColor = drawColor;
-                ctx.fillStyle = drawColor; 
-                ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
-                
-                // تفاصيل
+                ctx.fillStyle = drawColor; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
                 ctx.shadowBlur = 0; ctx.fillStyle = '#111';
                 
                 if(this.type === 'boss') {
-                    // الوحش (4 مدافع + مدفع وسط)
-                    ctx.fillRect(10, -25, 30, 8); ctx.fillRect(10, 17, 30, 8);
-                    ctx.fillRect(5, -35, 20, 8); ctx.fillRect(5, 27, 20, 8);
-                    ctx.fillRect(10, -10, 40, 20); // وسط
-                    // بار صحة الوحش
+                    ctx.fillRect(15, -30, 40, 60); ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI*2); ctx.fill();
                     ctx.fillStyle = 'red'; ctx.fillRect(-30, -50, 60, 4);
                     ctx.fillStyle = '#0f0'; ctx.fillRect(-30, -50, 60 * (this.hp/this.maxHp), 4);
                 } else if(this.type === 'zombie') {
-                     // شكل الزومبي (مخيف قليلاً)
-                     ctx.beginPath(); ctx.arc(5, -5, 4, 0, Math.PI*2); ctx.fill(); // عين 1
-                     ctx.beginPath(); ctx.arc(5, 5, 4, 0, Math.PI*2); ctx.fill(); // عين 2
+                     ctx.beginPath(); ctx.arc(5, -5, 4, 0, Math.PI*2); ctx.fill();
+                     ctx.beginPath(); ctx.arc(5, 5, 4, 0, Math.PI*2); ctx.fill();
                 } else {
-                    // عدو عادي
                     ctx.fillRect(5, -5, 15, 10);
                 }
                 ctx.restore();
@@ -254,11 +201,12 @@
 
         function spawnEnemy(type = 'enemy', xOffset = 0) {
             let startX = width/2 + xOffset;
-            let startY = -50; // يأتي من الأعلى
+            let startY = -50;
             if(type === 'zombie') {
-                // الزومبي يأتي من كل مكان
                 startX = Math.random() < 0.5 ? -20 : width+20;
                 startY = Math.random() * height;
+            } else if (type === 'enemy') {
+                startX = Math.random() * width;
             }
             let e = new Agent(startX, startY, type);
             enemies.push(e);
@@ -266,36 +214,21 @@
 
         function shoot(s) {
             let shots = [];
-            
             if(s.type === 'player') {
-                if(isRageActive) {
-                    // في وضع الغضب: 3 رصاصات
-                    shots.push(s.angle); 
-                    shots.push(s.angle - 0.2); 
-                    shots.push(s.angle + 0.2);
-                } else {
-                    shots.push(s.angle);
-                }
+                if(isRageActive) { shots.push(s.angle, s.angle-0.2, s.angle+0.2); } 
+                else { shots.push(s.angle); }
             } else if(s.type === 'boss') {
-                // الوحش يطلق 3 رصاصات
-                shots.push(s.angle);
-                shots.push(s.angle - 0.3);
-                shots.push(s.angle + 0.3);
+                shots.push(s.angle, s.angle-0.3, s.angle+0.3);
             } else {
                 shots.push(s.angle + (Math.random()-0.5)*0.1);
             }
-
             shots.forEach(a => {
                 let size = (s.type === 'player' && isRageActive) ? 6 : 3;
-                let dmg = (s.type === 'player') ? (isRageActive ? 20 : 5) : 5; // ضرر اللاعب 5 (بطيء)
-                
+                let dmg = (s.type === 'player') ? (isRageActive ? 20 : 10) : 5;
                 bullets.push({
-                    x: s.x, y: s.y, 
-                    vx: Math.cos(a)*10, vy: Math.sin(a)*10, 
+                    x: s.x, y: s.y, vx: Math.cos(a)*10, vy: Math.sin(a)*10, 
                     color: (s.type === 'player' && isRageActive) ? '#ff4400' : s.color, 
-                    owner: s.type === 'player' ? 'p' : 'e',
-                    size: size,
-                    damage: dmg
+                    owner: s.type === 'player' ? 'p' : 'e', size: size, damage: dmg
                 });
             });
         }
@@ -308,75 +241,73 @@
             let el = document.getElementById('wave-msg'); el.innerText = text; el.style.opacity = 1; setTimeout(() => el.style.opacity = 0, 3000);
         }
 
-        // --- نظام الغضب ---
-        function activateRage() {
-            if(rageCharge < 100) return;
-            isRageActive = true;
-            rageDuration = 600; // 10 ثواني (60 فريم * 10)
-            rageCharge = 0;
-            document.getElementById('rage-btn').style.display = 'none';
-            showMsg("🔥🔥 RAGE UNLEASHED 🔥🔥");
-            createExplosion(player.x, player.y, '#ff4400', 50);
-            
-            // استدعاء حشد الزومبي
-            for(let i=0; i<8; i++) setTimeout(() => spawnEnemy('zombie'), i*500);
-        }
+        // --- إدارة اللعبة والتأكد من عدم فراغ الشاشة ---
+        function maintainEnemies() {
+            // إذا كنا في معركة وحش، لا تضف أعداء عاديين
+            if(bossPhase === 1 || bossPhase === 2) return;
 
-        function updateRage() {
-            if(isRageActive) {
-                rageDuration--;
-                if(rageDuration <= 0) {
-                    isRageActive = false;
-                    player.color = '#00f3ff';
-                }
-            } else {
-                // شحن الغضب كل دقيقة (60 ثانية = 3600 فريم)
-                // نزيد النسبة ببطء
-                if(rageCharge < 100) rageCharge += (100 / 3600);
-                
-                document.getElementById('r-time').innerText = Math.floor(rageCharge);
-                
-                if(rageCharge >= 100) {
-                    document.getElementById('rage-btn').style.display = 'flex';
+            let targetCount = 3 + Math.floor(score/50); // يزيد العدد مع النقاط
+            
+            // إذا قل العدد عن المطلوب، أضف عدواً
+            if(enemies.length < targetCount) {
+                // استدعاء فوري إذا الشاشة فارغة تماماً
+                if(enemies.length === 0) {
+                    spawnEnemy(bossPhase === 3 ? 'zombie' : 'enemy');
+                } 
+                // احتمالية استدعاء في كل فريم (لتعبئة الشاشة تدريجياً)
+                else if(Math.random() < 0.05) {
+                    spawnEnemy(bossPhase === 3 ? 'zombie' : 'enemy');
                 }
             }
         }
 
-        // --- منطق التقدم ---
         function checkProgression() {
             // المرحلة 1: وحش 1 عند 100 نقطة
             if(score >= 100 && bossPhase === 0) {
                 bossPhase = 1; showMsg("⚠️ BOSS DETECTED ⚠️");
                 enemies = []; setTimeout(() => spawnEnemy('boss'), 1000);
             }
-            
             // المرحلة 2: التوأم بعد موت الوحش الأول
-            if(bossPhase === 1 && enemies.length === 0) {
+            else if(bossPhase === 1 && enemies.length === 0) {
                 bossPhase = 2; showMsg("⚠️ THE TWINS ⚠️");
-                setTimeout(() => { spawnEnemy('boss', -50); spawnEnemy('boss', 50); }, 2000);
+                setTimeout(() => { spawnEnemy('boss', -60); spawnEnemy('boss', 60); }, 2000);
             }
-
-            // المرحلة 3: الزومبي بعد موت التوأم (فوق 250 نقطة)
-            if(bossPhase === 2 && score > 250 && enemies.length === 0) {
+            // المرحلة 3: الزومبي بعد موت التوأم
+            else if(bossPhase === 2 && enemies.length === 0 && score > 200) {
                 bossPhase = 3; showMsg("☣️ ZOMBIE HORDE ☣️");
             }
+        }
 
-            // إدارة الزومبي والأعداء
-            let maxEnemies = 3 + Math.floor(score/100);
-            if(enemies.length < maxEnemies && bossPhase !== 1 && bossPhase !== 2) {
-                if(bossPhase === 3) {
-                    if(Math.random() < 0.05) spawnEnemy('zombie');
-                } else {
-                    if(Math.random() < 0.03) spawnEnemy('enemy');
-                }
+        // --- Rage System ---
+        function activateRage() {
+            isRageActive = true;
+            rageDuration = 600; 
+            rageCharge = 0;
+            document.getElementById('rage-btn').style.display = 'none';
+            showMsg("🔥🔥 RAGE UNLEASHED 🔥🔥");
+            createExplosion(player.x, player.y, '#ff4400', 50);
+            // استدعاء فوري لزومبي
+            for(let i=0; i<6; i++) setTimeout(() => spawnEnemy('zombie'), i*300);
+        }
+
+        function updateRage() {
+            if(isRageActive) {
+                rageDuration--;
+                if(rageDuration <= 0) { isRageActive = false; }
+            } else {
+                if(rageCharge < 100) rageCharge += (100 / 1800); // يشحن في 30 ثانية
+                document.getElementById('r-time').innerText = Math.floor(rageCharge);
+                if(rageCharge >= 100) document.getElementById('rage-btn').style.display = 'flex';
             }
         }
 
         function startGame() {
             document.getElementById('start-screen').style.display = 'none';
             player = new Agent(width/2, height-100, 'player');
-            enemies = []; bullets = []; score = 0; bossPhase = 0; rageCharge = 0;
-            spawnEnemy(); gameRunning = true; loop();
+            enemies = []; bullets = []; score = 0; bossPhase = 0; rageCharge = 100; // ابدأ بشحن كامل للتجربة
+            gameRunning = true; 
+            spawnEnemy(); 
+            loop();
         }
 
         function loop() {
@@ -385,28 +316,23 @@
             
             if(shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.9; }
 
-            // الخلفية
             ctx.fillStyle = '#050505'; ctx.fillRect(0,0,width,height);
-            // شبكة واسعة (تأثير Zoom Out)
             ctx.strokeStyle = 'rgba(0, 243, 255, 0.05)'; ctx.lineWidth = 1; ctx.beginPath();
             for(let i=0; i<width; i+=80) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
             for(let i=0; i<height; i+=80) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
             ctx.stroke();
 
-            // تحديث الغضب
             updateRage();
+            maintainEnemies(); // التأكد المستمر من وجود أعداء
 
-            // رسم الجزيئات
             for(let i=particles.length-1; i>=0; i--) {
                 let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
                 ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; if(p.life<=0) particles.splice(i,1);
             }
 
-            // تحديث ورسم الكائنات
             if(player) player.update(); player.draw();
             enemies.forEach(e => { e.update(); e.draw(); });
 
-            // الرصاص
             for(let i=bullets.length-1; i>=0; i--) {
                 let b = bullets[i]; b.x += b.vx; b.y += b.vy;
                 ctx.strokeStyle = b.color; ctx.lineWidth = b.size; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x-b.vx, b.y-b.vy); ctx.stroke();
@@ -418,29 +344,25 @@
                     if(Math.hypot(b.x-t.x, b.y-t.y) < t.radius+5) {
                         createExplosion(t.x, t.y, b.color, 3);
                         if(b.owner === 'p') {
-                            t.hp -= b.damage; // ضرر بطيء
+                            t.hp -= b.damage;
                             if(t.hp <= 0) {
-                                score += (t.type==='boss'?50:1); 
+                                score += (t.type==='boss'?50:5); 
                                 createExplosion(t.x, t.y, '#fff', 10);
                                 enemies = enemies.filter(e => e !== t);
                                 checkProgression();
                             }
                         } else {
-                            // ضرر اللاعب
-                            player.hp -= 2; 
-                            shake = 5;
-                            if(player.hp <= 0) location.reload(); // خسارة
+                            player.hp -= 2; shake = 5;
+                            if(player.hp <= 0) location.reload();
                         }
                         bullets.splice(i,1); break;
                     }
                 }
             }
 
-            // واجهة المستخدم
             document.getElementById('p-score').innerText = score;
             document.getElementById('p-hp').innerText = Math.max(0, Math.floor((player.hp/player.maxHp)*100));
 
-            // رسم عصا التحكم
             if (input.active) {
                 ctx.beginPath(); ctx.arc(input.startX, input.startY, 40, 0, Math.PI*2);
                 ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.stroke();
@@ -451,25 +373,32 @@
             ctx.restore();
         }
 
-        // --- التحكم باللمس (زر واحد للحركة والإطلاق) ---
+        // --- Rage Button Listener ---
+        const rageBtn = document.getElementById('rage-btn');
+        rageBtn.addEventListener('touchstart', (e) => {
+            e.stopPropagation(); // منع انتقال اللمس للعبة
+            activateRage();
+        });
+        rageBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activateRage();
+        });
+
+        // --- Joystick Logic ---
         window.addEventListener('touchstart', e => {
-            // السماح بضغط الأزرار (مثل Rage)
             if(e.target.tagName === 'BUTTON' || e.target.id === 'rage-btn') return;
             e.preventDefault();
-            
-            // نأخذ اللمسة الأولى فقط للتحكم
             if(!input.active) {
                 let t = e.changedTouches[0];
                 input.active = true;
                 input.id = t.identifier;
                 input.startX = t.clientX; input.startY = t.clientY;
                 input.x = t.clientX; input.y = t.clientY;
-                input.dx = 0; input.dy = 0;
             }
         }, {passive: false});
 
         window.addEventListener('touchmove', e => {
-            if(e.target.tagName !== 'BUTTON') e.preventDefault();
+            if(e.target.tagName !== 'BUTTON' && e.target.id !== 'rage-btn') e.preventDefault();
             for(let i=0; i<e.changedTouches.length; i++) {
                 let t = e.changedTouches[i];
                 if(input.active && t.identifier === input.id) {
@@ -477,11 +406,8 @@
                     let dy = t.clientY - input.startY;
                     let dist = Math.min(40, Math.hypot(dx, dy));
                     let angle = Math.atan2(dy, dx);
-                    
                     input.x = input.startX + Math.cos(angle) * dist;
                     input.y = input.startY + Math.sin(angle) * dist;
-                    
-                    // تطبيع القيم للحركة
                     input.dx = Math.cos(angle) * (dist/40);
                     input.dy = Math.sin(angle) * (dist/40);
                 }
@@ -489,7 +415,6 @@
         }, {passive: false});
 
         window.addEventListener('touchend', e => {
-             if(e.target.tagName !== 'BUTTON') e.preventDefault();
              for(let i=0; i<e.changedTouches.length; i++) {
                 if(e.changedTouches[i].identifier === input.id) {
                     input.active = false; input.dx = 0; input.dy = 0;
