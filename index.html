@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEON WARS: Double Trouble</title>
+    <title>NEON WARS: Infinite</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -14,29 +14,35 @@
         
         .screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(5, 5, 10, 0.95);
+            background: rgba(5, 5, 10, 0.98);
             display: flex; flex-direction: column;
             justify-content: center; align-items: center; pointer-events: auto; z-index: 100;
         }
         
         h1 { color: #00f3ff; text-shadow: 0 0 20px #00f3ff; font-size: 40px; text-align: center; margin: 0; }
-        p { color: #aaa; margin-top: 5px; font-size: 14px; text-align: center; max-width: 80%; }
+        p { color: #aaa; margin-top: 5px; font-size: 14px; text-align: center; }
 
         .btn {
             background: transparent; border: 2px solid #00f3ff; color: #00f3ff;
             padding: 15px 40px; font-size: 18px; font-family: 'Orbitron', sans-serif;
-            cursor: pointer; margin-top: 30px; text-transform: uppercase;
-            box-shadow: 0 0 10px #00f3ff; animation: pulse 1s infinite alternate;
+            cursor: pointer; margin-top: 20px; text-transform: uppercase; width: 250px;
+            box-shadow: 0 0 10px #00f3ff; transition: 0.2s;
         }
         .btn:active { background: #00f3ff; color: #000; }
-        
-        @keyframes pulse { from { box-shadow: 0 0 10px #00f3ff; } to { box-shadow: 0 0 20px #00f3ff, 0 0 40px #00f3ff; } }
+        .btn-green { border-color: #0f0; color: #0f0; box-shadow: 0 0 10px #0f0; }
+        .btn-green:active { background: #0f0; }
 
         #hud { padding: 15px; display: flex; justify-content: space-between; width: 90%; margin: 0 auto; text-shadow: 0 2px 5px rgba(0,0,0,0.8); font-size: 18px; font-weight: bold; }
         
         #wave-msg {
             position: absolute; top: 20%; width: 100%; text-align: center;
-            color: #f1c40f; font-size: 30px; font-weight: bold; opacity: 0; transition: opacity 0.5s; text-shadow: 0 0 10px red;
+            color: #f1c40f; font-size: 30px; font-weight: bold; opacity: 0; transition: opacity 0.5s;
+        }
+        
+        /* أيقونة الحفظ */
+        #save-icon {
+            position: absolute; top: 20px; right: 20px; font-size: 20px; display: none;
+            color: #0f0; text-shadow: 0 0 5px #0f0;
         }
     </style>
 </head>
@@ -44,18 +50,14 @@
 
     <div id="start-screen" class="screen">
         <h1>NEON WARS</h1>
-        <p>PHASE 1: SURVIVE<br>PHASE 2: THE TWINS</p>
-        <button class="btn" onclick="startGame()">START BATTLE</button>
-    </div>
-
-    <div id="win-screen" class="screen" style="display:none;">
-        <h1 style="color:#f1c40f">VICTORY!</h1>
-        <p>YOU DEFEATED THE TWIN BOSSES</p>
-        <p>SCORE: <span id="final-score">0</span></p>
-        <!-- ضع رابط الجزء الثاني هنا -->
-        <a id="next-game-link" href="#" target="_blank">
-            <button class="btn">GET PART 2</button>
-        </a>
+        <p>SYSTEM READY</p>
+        
+        <!-- زر إكمال اللعب يظهر فقط إذا كان هناك حفظ -->
+        <button id="btn-continue" class="btn btn-green" onclick="loadAndStart()" style="display:none;">CONTINUE (LVL <span id="saved-lvl">0</span>)</button>
+        
+        <button class="btn" onclick="startNewGame()">NEW GAME</button>
+        
+        <p style="margin-top: 30px; font-size: 10px; color: #555;">AUTO-SAVE ENABLED</p>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -63,9 +65,10 @@
     <div id="ui-layer">
         <div id="hud">
             <div style="color:#00f3ff">SCORE: <span id="p-score">0</span></div>
-            <div style="color:#ff0055">BOSSES: <span id="boss-count">0</span></div>
+            <div style="color:#f1c40f">LEVEL: <span id="p-level">1</span></div>
         </div>
-        <div id="wave-msg">WARNING!</div>
+        <div id="wave-msg">LEVEL 1</div>
+        <div id="save-icon">💾 SAVING...</div>
     </div>
 
     <script>
@@ -79,21 +82,23 @@
         }
         window.addEventListener('resize', resize); resize();
 
+        // بيانات اللعبة التي سيتم حفظها
+        let gameData = {
+            level: 1,
+            score: 0,
+            fireRate: 20, // سرعة السلاح
+            unlockedWeapons: 1
+        };
+
         let gameRunning = false;
-        let score = 0;
-        let fireRate = 20;
         let frame = 0;
-        
         let enemies = [];
         let bullets = [];
         let particles = [];
         let shake = 0;
+        let bossActive = false;
         
-        // نظام المراحل (Phase System)
-        // 0: عادي | 1: وحش واحد | 2: وحشين
-        let bossPhase = 0; 
-        
-        const house = { x: 0, y: 60 }; 
+        const house = { x: 0, y: 60 };
 
         const input = {
             joystick: { active: false, x: 0, y: 0, dx: 0, dy: 0, id: null },
@@ -103,6 +108,40 @@
             isMobile: false
         };
 
+        // --- نظام الحفظ (Save System) ---
+        function saveGame() {
+            localStorage.setItem('neonWarsSave_v1', JSON.stringify(gameData));
+            // إظهار أيقونة الحفظ
+            let icon = document.getElementById('save-icon');
+            icon.style.display = 'block';
+            setTimeout(() => icon.style.display = 'none', 1500);
+        }
+
+        function checkSaveFile() {
+            let data = localStorage.getItem('neonWarsSave_v1');
+            if(data) {
+                let parsed = JSON.parse(data);
+                document.getElementById('btn-continue').style.display = 'block';
+                document.getElementById('saved-lvl').innerText = parsed.level;
+            }
+        }
+
+        function startNewGame() {
+            // تصفير البيانات
+            gameData = { level: 1, score: 0, fireRate: 20, unlockedWeapons: 1 };
+            saveGame(); // حفظ البداية الجديدة
+            initLevel();
+        }
+
+        function loadAndStart() {
+            let data = localStorage.getItem('neonWarsSave_v1');
+            if(data) {
+                gameData = JSON.parse(data);
+                initLevel();
+            }
+        }
+
+        // --- الكائنات ---
         class Agent {
             constructor(x, y, type) {
                 this.x = x; this.y = y; this.type = type; 
@@ -111,9 +150,11 @@
                 if(type === 'player') {
                     this.radius = 20; this.color = '#00f3ff'; this.speed = 4.5; this.hp = 100;
                 } else if (type === 'boss') {
-                    this.radius = 45; this.color = '#f1c40f'; this.speed = 3; this.hp = 200; // 200 HP للوحش
+                    this.radius = 50; this.color = '#f1c40f'; this.speed = 2 + (gameData.level * 0.1); // يسرع كل مستوى
+                    this.hp = 150 + (gameData.level * 50); // تزيد الصحة كل مستوى
                 } else { 
-                    this.radius = 20; this.color = '#ff0055'; this.speed = 3.5; this.hp = 1;
+                    this.radius = 20; this.color = '#ff0055'; this.speed = 3 + (gameData.level * 0.05); 
+                    this.hp = 1 + Math.floor(gameData.level / 5); // يصبحون أقوى
                 }
             }
 
@@ -128,33 +169,27 @@
                     if (input.isMobile) { if(dx||dy) this.angle = Math.atan2(dy, dx); }
                     else {
                         this.angle = Math.atan2(input.mouse.y - this.y, input.mouse.x - this.x);
-                        if(input.mouse.down && frame % fireRate === 0) shoot(this);
+                        if(input.mouse.down && frame % gameData.fireRate === 0) shoot(this);
                     }
-                    if (input.isMobile && input.fireBtn.active && frame % fireRate === 0) shoot(this);
-
+                    if (input.isMobile && input.fireBtn.active && frame % gameData.fireRate === 0) shoot(this);
                 } else {
-                    // ذكاء الأعداء
                     let dist = Math.hypot(target.x - this.x, target.y - this.y);
                     this.angle = Math.atan2(target.y - this.y, target.x - this.x);
-                    
-                    // الوحوش تبتعد قليلاً لكي لا تلتصق باللاعب
                     let stopDist = (this.type === 'boss') ? 200 : 120;
-                    
                     if(dist > stopDist) { dx = Math.cos(this.angle); dy = Math.sin(this.angle); }
                     else if(dist < stopDist - 50) { dx = -Math.cos(this.angle); dy = -Math.sin(this.angle); }
                     
-                    // تفادي التصادم بين الوحوش (Separation)
                     enemies.forEach(other => {
                         if(other !== this) {
                             let d = Math.hypot(this.x - other.x, this.y - other.y);
                             if(d < this.radius + other.radius) {
-                                dx += (this.x - other.x) / d;
-                                dy += (this.y - other.y) / d;
+                                dx += (this.x - other.x) / d; dy += (this.y - other.y) / d;
                             }
                         }
                     });
-
-                    let shootProb = (this.type === 'boss') ? 0.04 : 0.02;
+                    
+                    // الوحش يطلق أسرع في المستويات المتقدمة
+                    let shootProb = (this.type === 'boss') ? 0.03 + (gameData.level*0.001) : 0.02;
                     if(Math.random() < shootProb) shoot(this);
                 }
                 this.x += dx * this.speed; this.y += dy * this.speed;
@@ -169,13 +204,12 @@
                 
                 ctx.shadowBlur = 0; ctx.fillStyle = '#111';
                 if(this.type === 'boss') {
-                    // شكل مخيف للوحش
-                    ctx.fillRect(15, -30, 40, 10); ctx.fillRect(15, 20, 40, 10); // 4 أسلحة
-                    ctx.fillRect(15, -10, 50, 20); // مدفع رئيسي
-                    ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI*2); ctx.fill();
-                    // شريط حياة فوق الوحش
-                    ctx.fillStyle = 'red'; ctx.fillRect(-30, -60, 60, 5);
-                    ctx.fillStyle = '#0f0'; ctx.fillRect(-30, -60, 60 * (this.hp/200), 5);
+                    ctx.fillRect(15, -30, 40, 60); 
+                    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI*2); ctx.fill();
+                    // شريط حياة
+                    let maxHp = 150 + (gameData.level * 50);
+                    ctx.fillStyle = 'red'; ctx.fillRect(-40, -70, 80, 5);
+                    ctx.fillStyle = '#0f0'; ctx.fillRect(-40, -70, 80 * (this.hp/maxHp), 5);
                 } else {
                     ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
                     ctx.fillRect(5, -5, 20, 10);
@@ -186,8 +220,8 @@
 
         let player;
 
-        function spawnEnemy(type = 'enemy', offsetX = 0) {
-            let e = new Agent(width/2 + offsetX, 100, type);
+        function spawnEnemy(type = 'enemy') {
+            let e = new Agent(width/2, 100, type);
             enemies.push(e);
             createExplosion(e.x, 80, e.color);
         }
@@ -195,68 +229,53 @@
         function showMsg(text) {
             let el = document.getElementById('wave-msg');
             el.innerText = text; el.style.opacity = 1;
-            setTimeout(() => el.style.opacity = 0, 4000);
+            setTimeout(() => el.style.opacity = 0, 3000);
         }
 
+        // --- نظام التقدم الذكي ---
         function checkProgression() {
-            // تحديث واجهة الوحوش
-            let bossCount = enemies.filter(e => e.type === 'boss').length;
-            document.getElementById('boss-count').innerText = bossCount;
-
-            // زيادة سرعة السلاح
-            if(score % 15 === 0) {
-                let newRate = 20 - Math.floor(score/20); 
-                fireRate = Math.max(4, newRate);
-            }
-
-            // المرحلة 1: ظهور الوحش الأول (عند 100 نقطة)
-            if(score >= 100 && bossPhase === 0) {
-                bossPhase = 1;
-                showMsg("⚠️ BOSS DETECTED ⚠️");
-                enemies = []; // قتل الصغار
+            // كل مستوى يحتاج قتلات تساوي (رقم المستوى * 20)
+            // مثال: المستوى 1 يحتاج 20 قتلة، المستوى 2 يحتاج 40 قتلة إضافية...
+            let threshold = gameData.level * 25;
+            
+            // هل وصلنا للوحش؟
+            if(gameData.score % threshold === 0 && !bossActive && gameData.score > 0) {
+                bossActive = true;
+                showMsg(`⚠️ LEVEL ${gameData.level} BOSS ⚠️`);
+                enemies = []; // إزالة الأعداء الصغار للمبارزة
                 setTimeout(() => spawnEnemy('boss'), 1000);
             }
-            
-            // إعادة تعبئة الأعداء العاديين إذا لم يكن هناك وحش
-            if(bossPhase === 0 && enemies.length < 2) {
+
+            // إعادة تعبئة الأعداء العاديين (يزداد عددهم كل مستوى)
+            let maxEnemies = 2 + Math.floor(gameData.level / 2);
+            if(!bossActive && enemies.length < maxEnemies) {
                 if(Math.random() < 0.05) spawnEnemy();
             }
         }
 
         function handleBossDeath() {
-            // إذا كنا في المرحلة 1 ومات الوحش (النتيجة حوالي 200)
-            if(bossPhase === 1) {
-                bossPhase = 2;
-                showMsg("⚠️ DOUBLE THREAT! ⚠️");
-                score += 50; // بونص
-                // ظهور وحشين!
-                setTimeout(() => {
-                    spawnEnemy('boss', -60); // يسار
-                    spawnEnemy('boss', 60);  // يمين
-                }, 1500);
-            }
-            // إذا كنا في المرحلة 2 (الوحشين)
-            else if(bossPhase === 2) {
-                let bossesLeft = enemies.filter(e => e.type === 'boss').length;
-                score += 100;
-                if(bossesLeft === 0) {
-                    // الفوز النهائي
-                    setTimeout(() => {
-                        gameRunning = false;
-                        document.getElementById('final-score').innerText = score;
-                        document.getElementById('win-screen').style.display = 'flex';
-                    }, 1000);
-                }
-            }
+            // عند قتل الوحش
+            gameData.level++; // زيادة المستوى
+            
+            // مكافأة: زيادة سرعة السلاح كل مستوى (بحد أقصى)
+            if(gameData.fireRate > 5) gameData.fireRate--;
+            
+            bossActive = false;
+            showMsg(`LEVEL ${gameData.level} START`);
+            saveGame(); // حفظ التقدم هنا!
+            
+            // تحديث الواجهة
+            document.getElementById('p-level').innerText = gameData.level;
         }
 
         function shoot(s) {
             let shots = [];
             if(s.type === 'boss') {
-                // الوحش يطلق في 3 اتجاهات
-                shots.push(s.angle);
-                shots.push(s.angle - 0.3);
-                shots.push(s.angle + 0.3);
+                // الوحش يطلق رصاصات بعدد مستواه (بحد أقصى 8 اتجاهات)
+                let count = Math.min(8, 2 + Math.floor(gameData.level/2));
+                for(let i=0; i<count; i++) {
+                    shots.push(s.angle + (i - count/2) * 0.2);
+                }
             } else {
                 shots.push(s.angle + (Math.random()-0.5)*0.1);
             }
@@ -269,29 +288,34 @@
         }
 
         function createExplosion(x, y, color) {
-            shake = 15;
-            for(let i=0; i<20; i++) particles.push({x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color});
+            shake = 10;
+            for(let i=0; i<15; i++) particles.push({x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color});
         }
 
         function drawHouse() {
             let hx = width/2 - 50;
             ctx.shadowBlur = 30; ctx.shadowColor = '#00f3ff';
-            ctx.fillStyle = '#0a0a1a';
-            ctx.fillRect(hx, house.y, 100, 60);
+            ctx.fillStyle = '#0a0a1a'; ctx.fillRect(hx, house.y, 100, 60);
             ctx.beginPath(); ctx.moveTo(hx, house.y); ctx.lineTo(hx+50, house.y-40); ctx.lineTo(hx+100, house.y); ctx.fill();
-            // البوابة
-            ctx.fillStyle = (bossPhase > 0) ? '#f00' : '#00f3ff';
-            ctx.fillRect(hx+30, house.y+20, 40, 40);
+            ctx.fillStyle = bossActive ? '#f00' : '#00f3ff'; ctx.fillRect(hx+35, house.y+20, 30, 40);
             ctx.shadowBlur = 0;
         }
 
-        // Loop
-        function startGame() {
+        function initLevel() {
             document.getElementById('start-screen').style.display = 'none';
             player = new Agent(width/2, height-150, 'player');
-            enemies = []; bullets = []; score = 0; bossPhase = 0;
+            enemies = []; bullets = []; 
+            
+            // تحديث الواجهة
+            document.getElementById('p-score').innerText = gameData.score;
+            document.getElementById('p-level').innerText = gameData.level;
+            
+            showMsg(`LEVEL ${gameData.level}`);
+            
+            bossActive = false;
+            gameRunning = true;
             spawnEnemy();
-            gameRunning = true; loop();
+            loop();
         }
 
         function loop() {
@@ -301,7 +325,6 @@
 
             if(shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.9; }
 
-            // خلفية
             ctx.fillStyle = '#050505'; ctx.fillRect(0,0,width,height);
             ctx.strokeStyle = 'rgba(0, 243, 255, 0.05)'; ctx.lineWidth = 1; ctx.beginPath();
             for(let i=0; i<width; i+=60) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
@@ -341,35 +364,33 @@
                 if(b.x<0||b.x>width||b.y<0||b.y>height) { bullets.splice(i,1); continue; }
 
                 let targets = (b.owner === 'p') ? enemies : [player];
-                
                 for(let t of targets) {
                     if(Math.hypot(b.x-t.x, b.y-t.y) < t.radius+5) {
                         createExplosion(t.x, t.y, b.color);
                         if(b.owner === 'p') {
                             t.hp -= 10;
                             if(t.hp <= 0) {
-                                score++; 
-                                createExplosion(t.x, t.y, '#fff'); // انفجار كبير
+                                gameData.score++;
+                                document.getElementById('p-score').innerText = gameData.score;
+                                
+                                createExplosion(t.x, t.y, '#fff');
                                 if(t.type === 'boss') {
-                                    // إذا مات وحش، نحذفه من المصفوفة
                                     enemies = enemies.filter(e => e !== t);
-                                    handleBossDeath(); // التحقق هل نخرج الوحشين؟
+                                    handleBossDeath();
                                 } else {
-                                    t.x = width/2; t.y = 80; t.hp = 1; // تدوير العدو العادي
+                                    t.x = width/2; t.y = 80; t.hp = 1 + Math.floor(gameData.level/5);
+                                    checkProgression();
                                 }
-                                checkProgression();
                             }
                         }
                         bullets.splice(i,1); break;
                     }
                 }
             }
-
-            document.getElementById('p-score').innerText = score;
             ctx.restore();
         }
 
-        // Inputs (نفس السابق)
+        // Inputs
         window.addEventListener('touchstart', e => { e.preventDefault(); input.isMobile = true; for(let i=0; i<e.changedTouches.length; i++){ let t = e.changedTouches[i]; if(t.clientX < width/2){ input.joystick.active = true; input.joystick.id = t.identifier; input.joystick.x = t.clientX; input.joystick.y = t.clientY; } else { input.fireBtn.active = true; input.fireBtn.id = t.identifier; input.fireBtn.x = t.clientX; input.fireBtn.y = t.clientY; } } }, {passive: false});
         window.addEventListener('touchmove', e => { e.preventDefault(); for(let i=0; i<e.changedTouches.length; i++){ let t = e.changedTouches[i]; if(input.joystick.active && t.identifier === input.joystick.id){ let dx = t.clientX - input.joystick.x, dy = t.clientY - input.joystick.y; let dist = Math.min(50, Math.hypot(dx, dy)); let ang = Math.atan2(dy, dx); input.joystick.dx = (Math.cos(ang)*dist)/50; input.joystick.dy = (Math.sin(ang)*dist)/50; } if(input.fireBtn.active && t.identifier === input.fireBtn.id){ input.fireBtn.x = t.clientX; input.fireBtn.y = t.clientY; } } }, {passive: false});
         window.addEventListener('touchend', e => { e.preventDefault(); for(let i=0; i<e.changedTouches.length; i++){ if(e.changedTouches[i].identifier === input.joystick.id){ input.joystick.active = false; input.joystick.dx=0; input.joystick.dy=0; } if(e.changedTouches[i].identifier === input.fireBtn.id) input.fireBtn.active = false; } }, {passive: false});
@@ -378,6 +399,9 @@
         window.addEventListener('mousemove', e => { input.mouse.x = e.clientX; input.mouse.y = e.clientY; });
         window.addEventListener('mousedown', () => input.mouse.down = true);
         window.addEventListener('mouseup', () => input.mouse.down = false);
+        
+        // التحقق من الحفظ عند فتح اللعبة
+        checkSaveFile();
     </script>
 </body>
 </html>
