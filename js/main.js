@@ -1,7 +1,8 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// === إعداد الصوت ===
+// === 1. حل مشكلة الصوت ===
+// ننشئ الصوت ولكن لا نشغله إلا داخل دالة startGame
 const bgMusic = new Audio('music.mp3'); 
 bgMusic.loop = true; 
 bgMusic.volume = 0.5;
@@ -16,35 +17,34 @@ function resize() {
 window.addEventListener('resize', resize); 
 resize();
 
-// === حالة اللعبة ===
+// === متغيرات اللعبة ===
 let gameState = 'START'; 
 let frame = 0;
 let kills = 0;
-let shake = 0;
+let shake = 0; // لاهتزاز الشاشة
 
 // === اللاعب ===
 const player = {
     x: 0, y: 0, radius: 15, angle: 0,
     hp: 100, maxHp: 100,
-    speed: 4,
-    level: 1, xp: 0, nextLevelXp: 100,
+    speed: 5,
+    level: 1,
     // خصائص السلاح
-    bulletDmg: 20,
-    bulletSpeed: 12,
-    fireRate: 20, 
+    bulletDmg: 25,
+    bulletSpeed: 14,
+    fireRate: 15, // سريع
     bulletCount: 1, 
-    spread: 0.1,
-    pierce: 0 
+    spread: 0.1
 };
 
-// المصفوفات
+// المصفوفات (إدارة الذاكرة)
 let enemies = [];
 let bullets = [];
-let particles = [];
-let items = []; // مصفوفة جديدة للأغراض التي تسقط
-let damageTexts = [];
+let particles = []; // قللنا استخدامها لتسريع اللعبة
+let items = []; // الغنائم على الأرض
+let floatingTexts = [];
 
-// === المدخلات ===
+// === التحكم باللمس ===
 const input = {
     active: false,
     sx: 0, sy: 0, 
@@ -54,41 +54,37 @@ const input = {
 };
 
 // ========================
-// نظام الغنائم (Pickups System)
+// نظام الغنائم (Loot System)
 // ========================
+// هذه هي "المكونات" التي تظهر على الأرض بدلاً من القائمة
 const lootTypes = [
-    { id: 'heal', color: '#00ff00', text: '❤️ HP UP', chance: 0.1, apply: () => { player.hp = Math.min(player.maxHp, player.hp + 30); } },
-    { id: 'dmg', color: '#ff0000', text: '⚡ DMG UP', chance: 0.05, apply: () => { player.bulletDmg += 5; } },
-    { id: 'multi', color: '#00ffff', text: '🔫 MULTI', chance: 0.03, apply: () => { player.bulletCount++; player.spread += 0.05; } },
-    { id: 'speed', color: '#ffff00', text: '🔥 SPEED', chance: 0.05, apply: () => { player.fireRate = Math.max(5, player.fireRate - 2); } }
+    { id: 'heal', color: '#00ff00', text: '+HEALTH', chance: 0.15, apply: () => { player.hp = Math.min(player.maxHp, player.hp + 40); } },
+    { id: 'dmg', color: '#ff0000', text: '+DAMAGE', chance: 0.1, apply: () => { player.bulletDmg += 5; player.level++; } },
+    { id: 'multi', color: '#00ffff', text: '+MULTI SHOT', chance: 0.05, apply: () => { player.bulletCount++; player.spread += 0.05; player.level++; } },
+    { id: 'speed', color: '#ffff00', text: '+FIRE RATE', chance: 0.1, apply: () => { player.fireRate = Math.max(4, player.fireRate - 1); player.level++; } }
 ];
 
 class ItemDrop {
     constructor(x, y) {
-        this.x = x; 
-        this.y = y;
-        this.radius = 8;
+        this.x = x; this.y = y;
+        this.radius = 12; // حجم العنصر
         this.magnet = false;
         
         // اختيار نوع الغرض عشوائياً
-        let rand = Math.random();
-        // النوع الافتراضي هو خبرة (XP)
-        this.type = 'xp'; 
-        this.color = '#ffd700'; // ذهبي للخبرة
+        this.type = lootTypes[0]; // افتراضي علاج
+        let r = Math.random();
         
-        // التحقق هل يسقط سلاح أو علاج؟
-        for(let loot of lootTypes) {
-            if(Math.random() < loot.chance) {
-                this.type = loot;
-                this.color = loot.color;
-                this.radius = 12; // الغرض المهم أكبر حجماً
-                break;
-            }
-        }
+        // منطق الاحتمالات
+        if(r < 0.05) this.type = lootTypes[2]; // Multishot (نادر)
+        else if(r < 0.15) this.type = lootTypes[3]; // Speed
+        else if(r < 0.30) this.type = lootTypes[1]; // Damage
+        else this.type = lootTypes[0]; // Heal (شائع)
+        
+        this.color = this.type.color;
     }
 
     update() {
-        // المغناطيس عند الاقتراب
+        // مغناطيس: ينجذب للاعب إذا اقترب
         let dx = player.x - this.x; 
         let dy = player.y - this.y;
         let dist = Math.hypot(dx, dy);
@@ -96,70 +92,54 @@ class ItemDrop {
         if(dist < 150) this.magnet = true;
         
         if(this.magnet) {
-            this.x += (dx/dist) * 10;
-            this.y += (dy/dist) * 10;
+            this.x += (dx/dist) * 12; // يطير نحو اللاعب
+            this.y += (dy/dist) * 12;
         }
 
         // التقاط الغرض
         if(dist < player.radius + this.radius) {
-            if(this.type === 'xp') {
-                // زيادة الخبرة
-                player.xp += 10;
-                checkLevelUp();
-            } else {
-                // تطبيق الترقية الخاصة
-                this.type.apply();
-                createFloatingText(player.x, player.y - 40, this.type.text, this.type.color, 20);
-                createParticles(player.x, player.y, this.color, 15);
-            }
-            return true; // تم الالتقاط
+            this.type.apply(); // تطبيق الترقية فوراً
+            createFloatingText(player.x, player.y - 40, this.type.text, this.type.color, 20);
+            return true; // يجب حذفه
         }
         return false;
     }
 
     draw() {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.shadowBlur = 10; ctx.shadowColor = this.color; ctx.fillStyle = this.color;
-        
-        if(this.type === 'xp') {
-            ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
-        } else {
-            // رسم مربع دوار للأغراض المميزة
-            ctx.rotate(frame * 0.1);
-            ctx.fillRect(-6, -6, 12, 12);
-        }
-        ctx.restore();
+        // رسم مربع بسيط للأداء العالي
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - 6, this.y - 6, 12, 12);
+        // إطار أبيض
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+        ctx.strokeRect(this.x - 6, this.y - 6, 12, 12);
     }
 }
 
 // ========================
-// الكلاسات
+// الكائنات
 // ========================
 class Enemy {
-    constructor(type) {
-        this.type = type; // 0:Chaser, 1:Tank, 2:Shooter
+    constructor() {
+        // تحديد النوع عشوائياً مع زيادة الصعوبة
+        let r = Math.random();
+        this.type = 0; // عادي
+        if(kills > 20 && r < 0.2) this.type = 1; // سريع
+        if(kills > 50 && r < 0.1) this.type = 2; // ضخم (Tank)
+
         let angle = Math.random() * Math.PI * 2;
-        let dist = Math.max(width, height) * 0.8;
+        let dist = Math.max(width, height) * 0.7; // يظهرون بعيداً
         this.x = player.x + Math.cos(angle) * dist;
         this.y = player.y + Math.sin(angle) * dist;
-        
-        // زيادة الصعوبة مع المستوى
-        let scaling = player.level * 0.1;
 
-        if(type === 0) { // Chaser
-            this.hp = 30 + (player.level * 5);
-            this.speed = 3 + Math.random();
-            this.radius = 12; this.color = '#ff0055';
-        } else if (type === 1) { // Tank
-            this.hp = 100 + (player.level * 20);
-            this.speed = 1.5;
-            this.radius = 25; this.color = '#ffaa00';
-        } else { // Shooter
-            this.hp = 40 + (player.level * 8);
-            this.speed = 2;
-            this.radius = 15; this.color = '#aa00ff';
-            this.shootTimer = 0;
+        if(this.type === 0) { // عادي
+            this.hp = 30 + (kills * 0.5); this.speed = 2.5; 
+            this.radius = 15; this.color = '#ff0055';
+        } else if(this.type === 1) { // سريع
+            this.hp = 20 + (kills * 0.2); this.speed = 4.5; 
+            this.radius = 10; this.color = '#ffff00';
+        } else { // ضخم
+            this.hp = 100 + (kills * 2); this.speed = 1.5; 
+            this.radius = 25; this.color = '#aa00ff';
         }
     }
 
@@ -169,230 +149,206 @@ class Enemy {
         let dist = Math.hypot(dx, dy);
         let angle = Math.atan2(dy, dx);
 
-        if(this.type === 2) { 
-            if(dist > 250) { this.x += Math.cos(angle)*this.speed; this.y += Math.sin(angle)*this.speed; } 
-            else if (dist < 150) { this.x -= Math.cos(angle)*this.speed; this.y -= Math.sin(angle)*this.speed; }
-            this.shootTimer++;
-            if(this.shootTimer > 100) {
-                this.shootTimer = 0;
-                bullets.push({ x: this.x, y: this.y, vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, color: '#aa00ff', owner: 'enemy', dmg: 10, radius: 4, life: 100 });
-            }
-        } else { 
-            this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
-            if(dist < this.radius + player.radius) {
-                player.hp -= 0.5;
-                createParticles(this.x, this.y, '#f00', 1);
-                shake = 5;
-            }
+        this.x += Math.cos(angle) * this.speed;
+        this.y += Math.sin(angle) * this.speed;
+
+        // تلامس مع اللاعب
+        if(dist < this.radius + player.radius) {
+            player.hp -= 0.5; // ضرر مستمر
+            shake = 3;
         }
     }
 
     draw() {
-        ctx.save(); ctx.translate(this.x, this.y);
-        ctx.fillStyle = this.color; ctx.shadowBlur = 10; ctx.shadowColor = this.color;
-        if(this.type === 1) ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2);
-        else if (this.type === 2) { ctx.rotate(Math.atan2(player.y - this.y, player.x - this.x)); ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(-10, 10); ctx.lineTo(-10, -10); ctx.fill(); } 
-        else { ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill(); }
-        ctx.restore();
+        // رسم بسيط جداً بدون ظلال للأداء
+        ctx.fillStyle = this.color;
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+        // عين للعدو
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius/3, 0, Math.PI*2); ctx.fill();
     }
 }
 
 class FloatingText {
     constructor(x, y, text, color, size) {
         this.x = x; this.y = y; this.text = text; this.color = color; this.size = size;
-        this.life = 60; this.vy = -1;
+        this.life = 40; 
     }
-    update() { this.y += this.vy; this.life--; return this.life <= 0; }
+    update() { this.y -= 1; this.life--; return this.life <= 0; }
     draw() {
-        ctx.globalAlpha = this.life / 60; ctx.fillStyle = this.color; ctx.font = `bold ${this.size}px monospace`;
-        ctx.fillText(this.text, this.x, this.y); ctx.globalAlpha = 1;
+        ctx.fillStyle = this.color; 
+        ctx.font = `bold ${this.size}px Arial`; // Arial أسرع في الرسم
+        ctx.fillText(this.text, this.x, this.y);
     }
-}
-
-// ========================
-// الوظائف المساعدة
-// ========================
-function createParticles(x, y, color, count) {
-    for(let i=0; i<count; i++) particles.push({x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color});
 }
 
 function createFloatingText(x, y, text, color, size=14) {
-    damageTexts.push(new FloatingText(x + (Math.random()*20-10), y, text, color, size));
-}
-
-function checkLevelUp() {
-    if(player.xp >= player.nextLevelXp) {
-        player.xp -= player.nextLevelXp;
-        player.level++;
-        player.nextLevelXp = Math.floor(player.nextLevelXp * 1.2);
-        createFloatingText(player.x, player.y - 50, "LEVEL UP!", '#ffd700', 30);
-        document.getElementById('lvl-txt').innerText = player.level;
-        // زيادة الصحة القصوى قليلاً كجائزة
-        player.maxHp += 10;
-        player.hp += 10;
-    }
-    updateUi();
-}
-
-function updateUi() {
-    let xpPerc = (player.xp / player.nextLevelXp) * 100;
-    document.getElementById('xp-fill').style.width = xpPerc + "%";
-    let hpPerc = (player.hp / player.maxHp) * 100;
-    document.getElementById('hp-fill').style.width = hpPerc + "%";
-    document.getElementById('kill-count').innerText = kills;
-}
-
-function playSound() {
-    // محاولة تشغيل الصوت (يجب أن تكون داخل حدث مستخدم)
-    bgMusic.play().then(() => {
-        // الصوت يعمل
-    }).catch(error => {
-        console.log("Audio autoplay prevented by browser. Interaction needed.");
-    });
+    floatingTexts.push(new FloatingText(x, y, text, color, size));
 }
 
 // ========================
-// الحلقة الرئيسية
+// تشغيل اللعبة
 // ========================
 function startGame() {
+    // 1. تشغيل الصوت فوراً عند الضغط
+    bgMusic.play().catch(e => console.log("Audio Error:", e));
+    
     document.getElementById('start-screen').style.display = 'none';
     
-    // تشغيل الصوت هنا لأن هذا الزر هو تفاعل مستخدم
-    playSound();
-
+    // ريستارت المتغيرات
     player.x = width/2; player.y = height/2;
-    player.hp = 100; player.level = 1; player.xp = 0;
-    
-    // إعادة تعيين السلاح للقوة الافتراضية
-    player.bulletDmg = 20; player.fireRate = 20; player.bulletCount = 1; player.spread = 0.1;
+    player.hp = 100; player.level = 1;
+    // إعادة قوة السلاح
+    player.bulletDmg = 25; player.fireRate = 15; player.bulletCount = 1;
 
-    enemies = []; bullets = []; items = [];
+    enemies = []; bullets = []; items = []; floatingTexts = [];
+    kills = 0; frame = 0;
+    
     gameState = 'PLAY';
     loop();
 }
 
 function loop() {
-    requestAnimationFrame(loop);
     if(gameState !== 'PLAY') return;
+    requestAnimationFrame(loop);
     frame++;
 
-    // مسح الشاشة
-    ctx.fillStyle = 'rgba(5, 5, 5, 0.3)'; ctx.fillRect(0, 0, width, height);
-    
-    // اهتزاز
-    ctx.save();
-    if(shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.9; }
+    // مسح الشاشة (بدون شفافية لتسريع الأداء)
+    ctx.fillStyle = '#050505'; 
+    ctx.fillRect(0, 0, width, height);
 
-    // 1. Spawner
-    let maxEnemies = 5 + player.level * 2;
-    if(enemies.length < maxEnemies) {
-        let type = 0; 
-        if(player.level > 2 && Math.random() < 0.2) type = 2; // Shooter
-        if(player.level > 4 && Math.random() < 0.1) type = 1; // Tank
-        enemies.push(new Enemy(type));
+    ctx.save();
+    // اهتزاز الشاشة
+    if(shake > 0) {
+        ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+        shake *= 0.9;
+        if(shake < 0.5) shake = 0;
     }
 
-    // 2. Player Movement
+    // 1. Spawner (ظهور الأعداء)
+    // كلما زاد القتل، زاد عدد الأعداء في الشاشة
+    let maxEnemies = 5 + Math.floor(kills / 5);
+    if(enemies.length < maxEnemies) {
+        if(Math.random() < 0.05) enemies.push(new Enemy());
+    }
+
+    // 2. تحديث اللاعب والحركة
     if(input.active) {
         player.x += input.dx * player.speed;
         player.y += input.dy * player.speed;
-        player.x = Math.max(20, Math.min(width-20, player.x));
-        player.y = Math.max(20, Math.min(height-20, player.y));
+        // حدود
+        player.x = Math.max(15, Math.min(width-15, player.x));
+        player.y = Math.max(15, Math.min(height-15, player.y));
 
-        // Auto Fire
+        // إطلاق نار تلقائي
         if(frame % player.fireRate === 0) {
+            // البحث عن أقرب عدو
             let nearest = null, minDist = 9999;
-            enemies.forEach(e => {
+            for(let e of enemies) {
                 let d = Math.hypot(e.x - player.x, e.y - player.y);
                 if(d < minDist) { minDist = d; nearest = e; }
-            });
+            }
             
-            let targetAngle = input.dy || input.dx ? Math.atan2(input.dy, input.dx) : 0;
-            if(nearest && minDist < 400) targetAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+            let angle = 0;
+            // إذا وجد عدو قريب يصوب عليه، وإلا يصوب حسب الحركة
+            if(nearest && minDist < 400) {
+                angle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+            } else if (input.dx || input.dy) {
+                angle = Math.atan2(input.dy, input.dx);
+            }
 
+            // إطلاق الرصاص
             for(let i=0; i<player.bulletCount; i++) {
                 let offset = (i - (player.bulletCount-1)/2) * player.spread;
                 bullets.push({
-                    x: player.x, y: player.y, 
-                    vx: Math.cos(targetAngle+offset)*player.bulletSpeed, vy: Math.sin(targetAngle+offset)*player.bulletSpeed, 
-                    color: '#00f3ff', owner: 'player', dmg: player.bulletDmg, radius: 4, life: 100, pierce: player.pierce
+                    x: player.x, y: player.y,
+                    vx: Math.cos(angle+offset)*player.bulletSpeed,
+                    vy: Math.sin(angle+offset)*player.bulletSpeed,
+                    life: 60
                 });
             }
         }
     }
 
-    // Draw Player
-    ctx.shadowBlur = 15; ctx.shadowColor = '#00f3ff'; ctx.fillStyle = '#00f3ff';
-    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+    // 3. رسم اللاعب
+    ctx.fillStyle = '#00f3ff';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
 
-    // 3. Updates
-    items = items.filter(i => { i.draw(); return !i.update(); }); // تحديث ورسم الأغراض
-    damageTexts = damageTexts.filter(t => { t.draw(); return !t.update(); });
-
-    for(let i=particles.length-1; i>=0; i--) {
-        let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
-        ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1; if(p.life<=0) particles.splice(i,1);
+    // 4. تحديث ورسم الأغراض (Items)
+    for(let i=items.length-1; i>=0; i--) {
+        items[i].draw();
+        if(items[i].update()) items.splice(i, 1);
     }
 
-    enemies.forEach(e => { e.update(); e.draw(); });
+    // 5. تحديث الأعداء
+    for(let e of enemies) {
+        e.update(); e.draw();
+    }
 
+    // 6. تحديث الرصاص والتصادم
+    ctx.fillStyle = '#00f3ff'; // لون الرصاص موحد للأداء
     for(let i=bullets.length-1; i>=0; i--) {
-        let b = bullets[i]; b.x += b.vx; b.y += b.vy; b.life--;
-        ctx.fillStyle = b.color; ctx.shadowBlur = 5; ctx.shadowColor = b.color;
-        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+        let b = bullets[i];
+        b.x += b.vx; b.y += b.vy; b.life--;
         
-        if(b.x<0||b.x>width||b.y<0||b.y>height||b.life<=0) { bullets.splice(i,1); continue; }
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
 
-        if(b.owner === 'player') {
-            for(let j=enemies.length-1; j>=0; j--) {
-                let e = enemies[j];
-                if(Math.hypot(b.x-e.x, b.y-e.y) < b.radius + e.radius) {
-                    e.hp -= b.dmg;
-                    createFloatingText(e.x, e.y, b.dmg, '#fff');
-                    createParticles(e.x, e.y, b.color, 3);
-                    if(e.hp <= 0) {
-                        // إسقاط غرض عند الموت
-                        items.push(new ItemDrop(e.x, e.y));
-                        createParticles(e.x, e.y, e.color, 10);
-                        enemies.splice(j, 1);
-                        kills++; shake = 5;
-                    }
-                    if(b.pierce > 0) b.pierce--; else bullets.splice(i,1);
-                    break;
+        if(b.life <= 0) { bullets.splice(i,1); continue; }
+
+        // فحص التصادم مع الأعداء
+        let hit = false;
+        for(let j=enemies.length-1; j>=0; j--) {
+            let e = enemies[j];
+            let dx = b.x - e.x; let dy = b.y - e.y;
+            if(dx*dx + dy*dy < (e.radius+4)*(e.radius+4)) { // حساب مسافة سريع
+                e.hp -= player.bulletDmg;
+                hit = true;
+                if(e.hp <= 0) {
+                    kills++;
+                    // فرصة 30% لسقوط غرض
+                    if(Math.random() < 0.3) items.push(new ItemDrop(e.x, e.y));
+                    enemies.splice(j, 1);
                 }
-            }
-        } else { 
-            if(Math.hypot(b.x-player.x, b.y-player.y) < b.radius + player.radius) {
-                player.hp -= b.dmg;
-                createFloatingText(player.x, player.y, "-"+b.dmg, '#f00', 18);
-                shake = 10;
-                createParticles(player.x, player.y, '#f00', 5);
-                bullets.splice(i,1);
+                break; 
             }
         }
+        if(hit) bullets.splice(i, 1);
     }
 
-    updateUi();
+    // 7. النصوص العائمة
+    for(let i=floatingTexts.length-1; i>=0; i--) {
+        floatingTexts[i].draw();
+        if(floatingTexts[i].update()) floatingTexts.splice(i, 1);
+    }
+
+    ctx.restore();
+
+    // تحديث الواجهة
+    updateHUD();
+
+    // الموت
     if(player.hp <= 0) {
         gameState = 'OVER';
         document.getElementById('final-score').innerText = kills;
-        document.getElementById('final-level').innerText = player.level;
         document.getElementById('game-over-screen').style.display = 'flex';
     }
 
-    // Joystick
+    // رسم عصا التحكم
     if(input.active) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(input.sx, input.sy, 50, 0, Math.PI*2); ctx.stroke();
         ctx.fillStyle = 'rgba(0, 243, 255, 0.5)';
-        ctx.beginPath(); ctx.arc(input.cx, input.cy, 20, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(input.cx, input.cy, 25, 0, Math.PI*2); ctx.fill();
     }
-    ctx.restore();
 }
 
-// === تحكم اللمس ===
+function updateHUD() {
+    document.getElementById('kill-count').innerText = kills;
+    document.getElementById('lvl-txt').innerText = player.level;
+    let hpPerc = Math.max(0, (player.hp / player.maxHp) * 100);
+    document.getElementById('hp-fill').style.width = hpPerc + "%";
+}
+
+// === مدخلات اللمس ===
 window.addEventListener('touchstart', e => {
     if(e.target.tagName === 'BUTTON') return;
     e.preventDefault();
