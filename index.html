@@ -3,566 +3,373 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEON WARS: OVERDRIVE</title>
+    <title>NEON WARS: FINAL</title>
+    <!-- استدعاء الخط -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    
+    <!-- CSS (التنسيق) مدمج هنا -->
     <style>
-        /* --- الأساسيات والتأثيرات البصرية --- */
-        * { touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; font-family: 'Orbitron', sans-serif; }
-        body { margin: 0; overflow: hidden; background-color: #050505; }
-        
-        /* تأثير الشاشة القديمة CRT */
+        * { 
+            touch-action: none; 
+            user-select: none; 
+            -webkit-tap-highlight-color: transparent; 
+            font-family: 'Orbitron', sans-serif; 
+            box-sizing: border-box;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #050505; /* لون الخلفية الأسود */
+            color: white;
+        }
+
+        /* تأثير الخلفية الشبكية */
         body::after {
-            content: ""; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            background-size: 100% 2px, 3px 100%; pointer-events: none; z-index: 999;
+            content: ""; 
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none; 
+            z-index: -1;
         }
 
         canvas { display: block; width: 100vw; height: 100vh; }
 
-        /* واجهة المستخدم */
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        /* الطبقات فوق اللعبة */
+        #ui-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            pointer-events: none; 
+        }
 
         .screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.95);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            pointer-events: auto; z-index: 100; transition: 0.3s;
+            pointer-events: auto; z-index: 100; 
         }
 
-        h1 { color: #00f3ff; text-shadow: 0 0 20px #00f3ff; font-size: 40px; margin: 0; text-align: center; letter-spacing: 5px; font-weight: 900; }
-        p { color: #aaa; font-size: 14px; margin-top: 10px; }
+        h1 { 
+            color: #00f3ff; text-shadow: 0 0 15px #00f3ff; 
+            font-size: 40px; margin: 0; text-align: center; letter-spacing: 3px; 
+        }
+        
+        p { color: #aaa; margin-top: 10px; font-size: 12px; letter-spacing: 1px; }
 
         .btn {
             background: rgba(0, 243, 255, 0.1); border: 2px solid #00f3ff; color: #00f3ff;
-            padding: 15px 40px; font-size: 20px; cursor: pointer; margin-top: 20px; 
-            text-transform: uppercase; width: 80%; max-width: 300px; border-radius: 5px;
-            box-shadow: 0 0 15px #00f3ff; pointer-events: auto; transition: 0.1s;
+            padding: 15px 40px; font-size: 20px; font-weight: bold; font-family: inherit;
+            cursor: pointer; margin-top: 30px; text-transform: uppercase; 
+            border-radius: 5px; box-shadow: 0 0 15px #00f3ff;
+            pointer-events: auto; transition: 0.2s;
         }
-        .btn:active { background: #00f3ff; color: #000; transform: scale(0.95); }
+        .btn:active { transform: scale(0.95); background: #00f3ff; color: #000; }
 
-        /* شريط الخبرة (XP Bar) */
-        #xp-container {
-            position: absolute; top: 0; left: 0; width: 100%; height: 10px; background: #222;
+        /* شريط الصحة (HUD Top) */
+        #hud-top {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 200px; pointer-events: none;
         }
-        #xp-fill {
-            height: 100%; width: 0%; background: #00ff00; 
-            box-shadow: 0 0 10px #00ff00; transition: width 0.2s;
+        #hp-bar-bg {
+            width: 100%; height: 15px; background: #333; border: 2px solid #fff;
+            border-radius: 10px; overflow: hidden;
         }
-        #level-badge {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            color: #fff; font-size: 20px; font-weight: bold; text-shadow: 0 0 5px #000;
+        #hp-fill {
+            width: 100%; height: 100%; background: #0f0; transition: width 0.2s;
         }
 
-        /* قائمة الترقية (Level Up) */
-        #upgrade-screen { display: none; background: rgba(0,0,0,0.95); z-index: 200; }
-        .card-container { display: flex; flex-direction: column; gap: 15px; width: 90%; max-width: 400px; }
-        .upgrade-card {
-            background: rgba(255,255,255,0.05); border: 1px solid #fff; padding: 15px;
-            cursor: pointer; pointer-events: auto; display: flex; align-items: center; gap: 15px;
-            transition: 0.2s;
+        /* العدادات (HUD Bottom) */
+        #hud-bottom {
+            position: absolute; bottom: 20px; left: 20px;
+            color: #fff; font-size: 18px; font-weight: bold;
+            display: flex; flex-direction: column; gap: 5px;
+            text-shadow: 0 0 5px #000; pointer-events: none;
         }
-        .upgrade-card:active { background: #fff; color: #000; }
-        .icon { font-size: 30px; }
-        .desc h3 { margin: 0; color: #ffd700; font-size: 18px; }
-        .desc span { font-size: 12px; color: #ccc; }
-
-        /* HUD */
-        #hud { position: absolute; bottom: 20px; left: 20px; color: #fff; font-size: 14px; }
-        #hp-bar-con { width: 150px; height: 10px; background: #333; margin-top: 5px; border: 1px solid #555; }
-        #hp-fill { width: 100%; height: 100%; background: #ff0055; transition: width 0.2s; }
-
-        #joystick-zone { position: absolute; bottom: 50px; left: 50px; width: 100px; height: 100px; pointer-events: none; opacity: 0.5; }
     </style>
 </head>
 <body>
 
     <!-- شاشة البداية -->
     <div id="start-screen" class="screen">
-        <h1>NEON<br>OVERDRIVE</h1>
-        <p>V2.0 - ROGUELITE EDITION</p>
-        <button class="btn" onclick="startGame()">SYSTEM LINK</button>
-        <p style="font-size: 10px; color: #555; margin-top: 30px;">COLLECT ORBS TO UPGRADE</p>
-    </div>
-
-    <!-- شاشة الترقية -->
-    <div id="upgrade-screen" class="screen">
-        <h1 style="font-size: 30px; color: #ffd700;">LEVEL UP!</h1>
-        <p>CHOOSE AN UPGRADE</p>
-        <div class="card-container" id="cards-box">
-            <!-- الكروت ستظهر هنا بالكود -->
-        </div>
+        <h1>NEON<br>WARS</h1>
+        <p>FAST PACED ACTION</p>
+        <button class="btn" onclick="startGame()">START MISSION</button>
+        <p style="font-size: 10px; color: #555; margin-top: 30px;">PICK UP ITEMS TO UPGRADE</p>
     </div>
 
     <!-- شاشة الموت -->
     <div id="game-over-screen" class="screen" style="display:none;">
-        <h1 style="color: #ff0055;">CRITICAL ERROR</h1>
-        <p>SCORE: <span id="final-score">0</span> | LEVEL: <span id="final-level">1</span></p>
-        <button class="btn" onclick="location.reload()">REBOOT</button>
+        <h1 style="color: #ff0055;">GAME OVER</h1>
+        <p>SCORE: <span id="final-score">0</span></p>
+        <button class="btn" onclick="location.reload()">RETRY</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
+    <!-- واجهة اللعب -->
     <div id="ui-layer">
-        <div id="xp-container"><div id="xp-fill"></div></div>
-        <div id="level-badge">LVL <span id="lvl-txt">1</span></div>
-        
-        <div id="hud">
-            <div>HP SYSTEM</div>
-            <div id="hp-bar-con"><div id="hp-fill"></div></div>
-            <div style="margin-top: 5px; color: #00f3ff;">KILLS: <span id="kill-count">0</span></div>
+        <div id="hud-top">
+            <div id="hp-bar-bg"><div id="hp-fill"></div></div>
+        </div>
+        <div id="hud-bottom">
+            <div>KILLS: <span id="kill-count">0</span></div>
+            <div style="font-size: 12px; color:#aaa;">LVL: <span id="lvl-txt">1</span></div>
         </div>
     </div>
 
+    <!-- JavaScript (البرمجة) مدمج هنا -->
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // === موسيقى (اختياري) ===
-        // تأكد من وجود ملف music.mp3 بجانب الملف
+        // إعداد الصوت (تأكد من وجود ملف music.mp3 بجانب هذا الملف)
         const bgMusic = new Audio('music.mp3'); 
-        bgMusic.loop = true; bgMusic.volume = 0.4;
+        bgMusic.loop = true; 
+        bgMusic.volume = 0.5;
 
         let width, height;
         function resize() {
-            width = window.innerWidth; height = window.innerHeight;
-            canvas.width = width; canvas.height = height;
+            width = window.innerWidth; 
+            height = window.innerHeight;
+            canvas.width = width; 
+            canvas.height = height;
         }
-        window.addEventListener('resize', resize); resize();
+        window.addEventListener('resize', resize); 
+        resize();
 
-        // === حالة اللعبة ===
-        let gameState = 'START'; // START, PLAY, UPGRADE, OVER
+        // متغيرات اللعبة
+        let gameState = 'START'; 
         let frame = 0;
-        let score = 0;
         let kills = 0;
+        let shake = 0;
 
-        // === اللاعب والترقيات ===
+        // اللاعب
         const player = {
             x: 0, y: 0, radius: 15, angle: 0,
             hp: 100, maxHp: 100,
-            speed: 4,
-            level: 1, xp: 0, nextLevelXp: 50,
-            // خصائص السلاح
-            bulletDmg: 20,
-            bulletSpeed: 12,
-            fireRate: 20, // كلما قل زادت السرعة
-            bulletCount: 1, // عدد الرصاص (Multishot)
-            spread: 0.1,
-            pierce: 0 // اختراق
+            speed: 5,
+            level: 1,
+            bulletDmg: 25, bulletSpeed: 14, fireRate: 15, bulletCount: 1, spread: 0.1
         };
 
-        // مصفوفات الكائنات
+        // المصفوفات
         let enemies = [];
         let bullets = [];
         let particles = [];
-        let xpOrbs = [];
-        let damageTexts = [];
+        let items = [];
+        let floatingTexts = [];
 
-        // === المدخلات ===
+        // التحكم
         const input = {
-            active: false,
-            sx: 0, sy: 0, // Start X, Y
-            cx: 0, cy: 0, // Current X, Y
-            dx: 0, dy: 0, // Normalized vector
-            id: null
+            touchActive: false,
+            sx: 0, sy: 0, cx: 0, cy: 0, dx: 0, dy: 0, id: null,
+            keys: { w: false, a: false, s: false, d: false }
         };
 
-        // ========================
-        // نظام الترقيات (ROGUELIKE)
-        // ========================
-        const upgradesList = [
-            { id: 'multishot', name: 'DOUBLE BARREL', desc: '+1 Bullet per shot', icon: '🔫', apply: () => { player.bulletCount++; player.spread += 0.1; } },
-            { id: 'dmg', name: 'HIGH VOLTAGE', desc: '+25% Damage', icon: '⚡', apply: () => { player.bulletDmg = Math.floor(player.bulletDmg * 1.25); } },
-            { id: 'speed', name: 'OVERCLOCK', desc: '+15% Fire Rate', icon: '🔥', apply: () => { player.fireRate = Math.max(5, Math.floor(player.fireRate * 0.85)); } },
-            { id: 'heal', name: 'REPAIR BOT', desc: 'Recover 50% HP', icon: '❤️', apply: () => { player.hp = Math.min(player.maxHp, player.hp + (player.maxHp*0.5)); } },
-            { id: 'move', name: 'THRUSTERS', desc: '+10% Move Speed', icon: '🚀', apply: () => { player.speed *= 1.1; } },
-            { id: 'pierce', name: 'RAILGUN', desc: 'Bullets pierce 1 enemy', icon: '🏹', apply: () => { player.pierce++; } }
+        // نظام الغنائم
+        const lootTypes = [
+            { id: 'heal', color: '#00ff00', text: '+HEALTH', chance: 0.2, apply: () => { player.hp = Math.min(player.maxHp, player.hp + 40); } },
+            { id: 'dmg', color: '#ff0000', text: '+DAMAGE', chance: 0.1, apply: () => { player.bulletDmg += 5; player.level++; } },
+            { id: 'multi', color: '#00ffff', text: '+MULTI SHOT', chance: 0.05, apply: () => { player.bulletCount++; player.spread += 0.05; player.level++; } },
+            { id: 'speed', color: '#ffff00', text: '+FIRE RATE', chance: 0.1, apply: () => { player.fireRate = Math.max(4, player.fireRate - 1); player.level++; } }
         ];
 
-        function showUpgradeScreen() {
-            gameState = 'UPGRADE';
-            const box = document.getElementById('cards-box');
-            box.innerHTML = '';
-            
-            // اختيار 3 ترقيات عشوائية
-            for(let i=0; i<3; i++) {
-                const upg = upgradesList[Math.floor(Math.random() * upgradesList.length)];
-                const div = document.createElement('div');
-                div.className = 'upgrade-card';
-                div.innerHTML = `<div class="icon">${upg.icon}</div><div class="desc"><h3>${upg.name}</h3><span>${upg.desc}</span></div>`;
-                div.onclick = () => {
-                    upg.apply();
-                    document.getElementById('upgrade-screen').style.display = 'none';
-                    gameState = 'PLAY';
-                    createFloatingText(player.x, player.y - 30, "SYSTEM UPGRADED", '#0f0', 20);
-                };
-                box.appendChild(div);
-            }
-            document.getElementById('upgrade-screen').style.display = 'flex';
-        }
-
-        // ========================
-        // الكلاسات
-        // ========================
-        class Enemy {
-            constructor(type) {
-                // أنواع الأعداء: 0:Chaser, 1:Tank, 2:Shooter
-                this.type = type;
-                let angle = Math.random() * Math.PI * 2;
-                let dist = Math.max(width, height) * 0.8;
-                this.x = player.x + Math.cos(angle) * dist;
-                this.y = player.y + Math.sin(angle) * dist;
-                
-                if(type === 0) { // Chaser
-                    this.hp = 30 + (player.level * 5);
-                    this.speed = 3 + (Math.random());
-                    this.radius = 12;
-                    this.color = '#ff0055';
-                    this.xp = 10;
-                } else if (type === 1) { // Tank
-                    this.hp = 100 + (player.level * 15);
-                    this.speed = 1.5;
-                    this.radius = 25;
-                    this.color = '#ffaa00';
-                    this.xp = 30;
-                } else { // Shooter
-                    this.hp = 40 + (player.level * 8);
-                    this.speed = 2;
-                    this.radius = 15;
-                    this.color = '#aa00ff';
-                    this.xp = 20;
-                    this.shootTimer = 0;
-                }
-                this.maxHp = this.hp;
-            }
-
-            update() {
-                let dx = player.x - this.x;
-                let dy = player.y - this.y;
-                let dist = Math.hypot(dx, dy);
-                let angle = Math.atan2(dy, dx);
-
-                if(this.type === 2) { // Shooter Logic
-                    if(dist > 250) {
-                        this.x += Math.cos(angle) * this.speed;
-                        this.y += Math.sin(angle) * this.speed;
-                    } else if (dist < 150) {
-                        this.x -= Math.cos(angle) * this.speed;
-                        this.y -= Math.sin(angle) * this.speed;
-                    }
-                    this.shootTimer++;
-                    if(this.shootTimer > 100) {
-                        this.shootTimer = 0;
-                        // رصاصة العدو
-                        bullets.push({
-                            x: this.x, y: this.y, 
-                            vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, 
-                            color: '#aa00ff', owner: 'enemy', dmg: 10, radius: 4, life: 100
-                        });
-                    }
-                } else { // Melee Logic
-                    this.x += Math.cos(angle) * this.speed;
-                    this.y += Math.sin(angle) * this.speed;
-                    if(dist < this.radius + player.radius) {
-                        player.hp -= 0.5; // ضرر التلامس
-                        createParticles(this.x, this.y, '#f00', 1);
-                        shake = 5;
-                    }
-                }
-            }
-
-            draw() {
-                ctx.save(); ctx.translate(this.x, this.y);
-                ctx.fillStyle = this.color; ctx.shadowBlur = 10; ctx.shadowColor = this.color;
-                
-                if(this.type === 1) ctx.fillRect(-this.radius, -this.radius, this.radius*2, this.radius*2); // Tank مربع
-                else if (this.type === 2) { // Shooter مثلث
-                    ctx.rotate(Math.atan2(player.y - this.y, player.x - this.x));
-                    ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(-10, 10); ctx.lineTo(-10, -10); ctx.fill();
-                } else { // Chaser دائرة
-                    ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
-                }
-                ctx.restore();
-            }
-        }
-
-        class XpOrb {
-            constructor(x, y, amount) {
-                this.x = x; this.y = y; this.amount = amount;
-                this.magnet = false;
+        class ItemDrop {
+            constructor(x, y) {
+                this.x = x; this.y = y; this.radius = 12; this.magnet = false;
+                this.type = lootTypes[0];
+                let r = Math.random();
+                if(r < 0.05) this.type = lootTypes[2];
+                else if(r < 0.15) this.type = lootTypes[3];
+                else if(r < 0.35) this.type = lootTypes[1];
+                else this.type = lootTypes[0];
+                this.color = this.type.color;
             }
             update() {
                 let dx = player.x - this.x; let dy = player.y - this.y;
                 let dist = Math.hypot(dx, dy);
-                if(dist < 150) this.magnet = true; // جذب مغناطيسي
-                
-                if(this.magnet) {
-                    this.x += (dx/dist) * 12;
-                    this.y += (dy/dist) * 12;
-                    if(dist < player.radius + 10) {
-                        addXp(this.amount);
-                        return true; // Picked up
-                    }
+                if(dist < 150) this.magnet = true;
+                if(this.magnet) { this.x += (dx/dist)*12; this.y += (dy/dist)*12; }
+                if(dist < player.radius + this.radius) {
+                    this.type.apply();
+                    createFloatingText(player.x, player.y - 40, this.type.text, this.type.color, 20);
+                    return true;
                 }
                 return false;
             }
             draw() {
-                ctx.fillStyle = '#00ff00'; ctx.shadowBlur = 5; ctx.shadowColor = '#00ff00';
-                ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI*2); ctx.fill();
-                ctx.shadowBlur = 0;
+                ctx.fillStyle = this.color; ctx.fillRect(this.x-6, this.y-6, 12, 12);
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(this.x-6, this.y-6, 12, 12);
+            }
+        }
+
+        class Enemy {
+            constructor() {
+                let r = Math.random();
+                this.type = 0;
+                if(kills > 20 && r < 0.2) this.type = 1;
+                if(kills > 50 && r < 0.1) this.type = 2;
+                let angle = Math.random() * Math.PI * 2;
+                let dist = Math.max(width, height) * 0.7;
+                this.x = player.x + Math.cos(angle) * dist;
+                this.y = player.y + Math.sin(angle) * dist;
+                if(this.type === 0) { this.hp = 30 + (kills*0.5); this.speed = 2.5; this.radius = 15; this.color = '#ff0055'; }
+                else if(this.type === 1) { this.hp = 20 + (kills*0.2); this.speed = 4.5; this.radius = 10; this.color = '#ffff00'; }
+                else { this.hp = 100 + (kills*2); this.speed = 1.5; this.radius = 25; this.color = '#aa00ff'; }
+            }
+            update() {
+                let dx = player.x - this.x; let dy = player.y - this.y;
+                let dist = Math.hypot(dx, dy);
+                let angle = Math.atan2(dy, dx);
+                this.x += Math.cos(angle) * this.speed; this.y += Math.sin(angle) * this.speed;
+                if(dist < this.radius + player.radius) { player.hp -= 0.5; shake = 3; }
+            }
+            draw() {
+                ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius/3, 0, Math.PI*2); ctx.fill();
             }
         }
 
         class FloatingText {
-            constructor(x, y, text, color, size) {
-                this.x = x; this.y = y; this.text = text; this.color = color; this.size = size;
-                this.life = 60; this.vy = -1;
-            }
-            update() {
-                this.y += this.vy; this.life--;
-                return this.life <= 0;
-            }
-            draw() {
-                ctx.globalAlpha = this.life / 60;
-                ctx.fillStyle = this.color; ctx.font = `bold ${this.size}px monospace`;
-                ctx.fillText(this.text, this.x, this.y);
-                ctx.globalAlpha = 1;
-            }
-        }
-
-        // ========================
-        // الوظائف الأساسية
-        // ========================
-
-        function createParticles(x, y, color, count) {
-            for(let i=0; i<count; i++) particles.push({x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color});
+            constructor(x, y, text, color, size) { this.x = x; this.y = y; this.text = text; this.color = color; this.size = size; this.life = 40; }
+            update() { this.y -= 1; this.life--; return this.life <= 0; }
+            draw() { ctx.fillStyle = this.color; ctx.font = `bold ${this.size}px Arial`; ctx.fillText(this.text, this.x, this.y); }
         }
 
         function createFloatingText(x, y, text, color, size=14) {
-            damageTexts.push(new FloatingText(x + (Math.random()*20-10), y, text, color, size));
+            floatingTexts.push(new FloatingText(x, y, text, color, size));
         }
-
-        function addXp(amount) {
-            player.xp += amount;
-            if(player.xp >= player.nextLevelXp) {
-                player.xp -= player.nextLevelXp;
-                player.level++;
-                player.nextLevelXp = Math.floor(player.nextLevelXp * 1.5);
-                document.getElementById('lvl-txt').innerText = player.level;
-                showUpgradeScreen();
-            }
-            updateUi();
-        }
-
-        function updateUi() {
-            // شريط XP
-            let xpPerc = (player.xp / player.nextLevelXp) * 100;
-            document.getElementById('xp-fill').style.width = xpPerc + "%";
-            // شريط صحة
-            let hpPerc = (player.hp / player.maxHp) * 100;
-            document.getElementById('hp-fill').style.width = hpPerc + "%";
-            document.getElementById('kill-count').innerText = kills;
-        }
-
-        let shake = 0;
-        function applyShake() {
-            if(shake > 0) {
-                ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
-                shake *= 0.9;
-            }
-        }
-
-        // ========================
-        // حلقة اللعبة
-        // ========================
 
         function startGame() {
+            bgMusic.play().catch(e => console.log("Audio Error (User interaction needed first):", e));
             document.getElementById('start-screen').style.display = 'none';
-            player.x = width/2; player.y = height/2;
-            player.hp = 100; player.level = 1; player.xp = 0;
-            enemies = []; bullets = []; xpOrbs = [];
-            bgMusic.play().catch(()=>{});
-            gameState = 'PLAY';
-            loop();
+            player.x = width/2; player.y = height/2; player.hp = 100; player.level = 1;
+            player.bulletDmg = 25; player.fireRate = 15; player.bulletCount = 1;
+            enemies = []; bullets = []; items = []; floatingTexts = []; kills = 0; frame = 0;
+            gameState = 'PLAY'; loop();
         }
 
         function loop() {
-            requestAnimationFrame(loop);
             if(gameState !== 'PLAY') return;
-            frame++;
-
-            // مسح الشاشة مع تأثير ذيل خفيف (Motion Blur)
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.3)'; 
-            ctx.fillRect(0, 0, width, height);
-
+            requestAnimationFrame(loop); frame++;
+            
+            ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, width, height);
             ctx.save();
-            applyShake();
+            if(shake > 0) { ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake); shake *= 0.9; if(shake < 0.5) shake = 0; }
 
-            // 1. إدارة الأعداء (Spawner)
-            let maxEnemies = 5 + player.level * 2;
-            if(enemies.length < maxEnemies) {
-                // أنواع مختلفة حسب المستوى
-                let type = 0; 
-                if(player.level > 2 && Math.random() < 0.2) type = 2; // Shooter
-                if(player.level > 4 && Math.random() < 0.1) type = 1; // Tank
-                enemies.push(new Enemy(type));
+            // Spawner
+            let maxEnemies = 5 + Math.floor(kills / 5);
+            if(enemies.length < maxEnemies) { if(Math.random() < 0.05) enemies.push(new Enemy()); }
+
+            // Movement Logic
+            let moveX = 0; let moveY = 0; let isMoving = false;
+            if(input.touchActive) { moveX = input.dx; moveY = input.dy; isMoving = true; }
+            else {
+                if (input.keys.w) moveY -= 1; if (input.keys.s) moveY += 1;
+                if (input.keys.a) moveX -= 1; if (input.keys.d) moveX += 1;
+                if (moveX !== 0 || moveY !== 0) { let len = Math.hypot(moveX, moveY); moveX /= len; moveY /= len; isMoving = true; }
             }
 
-            // 2. تحديث اللاعب
-            if(input.active) {
-                // الحركة
-                player.x += input.dx * player.speed;
-                player.y += input.dy * player.speed;
-                // البقاء في الحدود
-                player.x = Math.max(20, Math.min(width-20, player.x));
-                player.y = Math.max(20, Math.min(height-20, player.y));
-
-                // الإطلاق التلقائي
+            if (isMoving) {
+                player.x += moveX * player.speed; player.y += moveY * player.speed;
+                player.x = Math.max(15, Math.min(width-15, player.x)); player.y = Math.max(15, Math.min(height-15, player.y));
+                
                 if(frame % player.fireRate === 0) {
-                    // البحث عن أقرب عدو
                     let nearest = null, minDist = 9999;
-                    enemies.forEach(e => {
+                    for(let e of enemies) {
                         let d = Math.hypot(e.x - player.x, e.y - player.y);
                         if(d < minDist) { minDist = d; nearest = e; }
-                    });
-                    
-                    let targetAngle = input.dy || input.dx ? Math.atan2(input.dy, input.dx) : 0;
-                    if(nearest && minDist < 400) targetAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-
-                    // Multi-shot logic
+                    }
+                    let targetAngle = (nearest && minDist < 400) ? Math.atan2(nearest.y - player.y, nearest.x - player.x) : (isMoving ? Math.atan2(moveY, moveX) : 0);
                     for(let i=0; i<player.bulletCount; i++) {
                         let offset = (i - (player.bulletCount-1)/2) * player.spread;
-                        bullets.push({
-                            x: player.x, y: player.y, 
-                            vx: Math.cos(targetAngle+offset)*player.bulletSpeed, vy: Math.sin(targetAngle+offset)*player.bulletSpeed, 
-                            color: '#00f3ff', owner: 'player', dmg: player.bulletDmg, radius: 4, life: 100, pierce: player.pierce
-                        });
+                        bullets.push({ x: player.x, y: player.y, vx: Math.cos(targetAngle+offset)*player.bulletSpeed, vy: Math.sin(targetAngle+offset)*player.bulletSpeed, life: 60 });
                     }
                 }
             }
 
-            // رسم اللاعب
-            ctx.shadowBlur = 15; ctx.shadowColor = '#00f3ff'; ctx.fillStyle = '#00f3ff';
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 0;
+            // Draw Player
+            ctx.fillStyle = '#00f3ff'; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
 
-            // 3. تحديث الكيانات
-            // XP Orbs
-            xpOrbs = xpOrbs.filter(o => { o.draw(); return !o.update(); });
+            // Updates
+            for(let i=items.length-1; i>=0; i--) { items[i].draw(); if(items[i].update()) items.splice(i, 1); }
+            for(let e of enemies) { e.update(); e.draw(); }
             
-            // Text
-            damageTexts = damageTexts.filter(t => { t.draw(); return !t.update(); });
-
-            // Particles
-            for(let i=particles.length-1; i>=0; i--) {
-                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
-                ctx.globalAlpha = p.life; ctx.fillStyle = p.color; 
-                ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
-                ctx.globalAlpha = 1; if(p.life<=0) particles.splice(i,1);
-            }
-
-            // Enemies
-            enemies.forEach((e, ei) => {
-                e.update(); e.draw();
-            });
-
-            // Bullets
+            ctx.fillStyle = '#00f3ff';
             for(let i=bullets.length-1; i>=0; i--) {
-                let b = bullets[i]; 
-                b.x += b.vx; b.y += b.vy; b.life--;
-                
-                ctx.fillStyle = b.color; ctx.shadowBlur = 5; ctx.shadowColor = b.color;
-                ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
-
-                if(b.x<0||b.x>width||b.y<0||b.y>height||b.life<=0) { bullets.splice(i,1); continue; }
-
-                // تصادم
-                if(b.owner === 'player') {
-                    for(let j=enemies.length-1; j>=0; j--) {
-                        let e = enemies[j];
-                        if(Math.hypot(b.x-e.x, b.y-e.y) < b.radius + e.radius) {
-                            e.hp -= b.dmg;
-                            createFloatingText(e.x, e.y, b.dmg, '#fff'); // رقم الضرر
-                            createParticles(e.x, e.y, b.color, 3);
-                            
-                            if(e.hp <= 0) {
-                                xpOrbs.push(new XpOrb(e.x, e.y, e.xp));
-                                createParticles(e.x, e.y, e.color, 10);
-                                enemies.splice(j, 1);
-                                kills++; shake = 5;
-                            }
-                            
-                            if(b.pierce > 0) { b.pierce--; } else { bullets.splice(i,1); }
-                            break;
+                let b = bullets[i]; b.x += b.vx; b.y += b.vy; b.life--;
+                ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+                if(b.life <= 0 || b.x<0 || b.x>width || b.y<0 || b.y>height) { bullets.splice(i,1); continue; }
+                let hit = false;
+                for(let j=enemies.length-1; j>=0; j--) {
+                    let e = enemies[j];
+                    let dx = b.x - e.x; let dy = b.y - e.y;
+                    if(dx*dx + dy*dy < (e.radius+4)*(e.radius+4)) {
+                        e.hp -= player.bulletDmg; hit = true;
+                        if(e.hp <= 0) {
+                            kills++; if(Math.random() < 0.4) items.push(new ItemDrop(e.x, e.y));
+                            enemies.splice(j, 1);
                         }
-                    }
-                } else { // رصاص العدو
-                    if(Math.hypot(b.x-player.x, b.y-player.y) < b.radius + player.radius) {
-                        player.hp -= b.dmg;
-                        createFloatingText(player.x, player.y, "-"+b.dmg, '#f00', 18);
-                        shake = 10;
-                        createParticles(player.x, player.y, '#f00', 5);
-                        bullets.splice(i,1);
+                        break;
                     }
                 }
+                if(hit) bullets.splice(i, 1);
             }
 
-            // التحقق من الموت
-            updateUi();
+            for(let i=floatingTexts.length-1; i>=0; i--) { floatingTexts[i].draw(); if(floatingTexts[i].update()) floatingTexts.splice(i, 1); }
+
+            ctx.restore();
+            updateHUD();
+
             if(player.hp <= 0) {
                 gameState = 'OVER';
                 document.getElementById('final-score').innerText = kills;
-                document.getElementById('final-level').innerText = player.level;
                 document.getElementById('game-over-screen').style.display = 'flex';
             }
 
-            // رسم الجويستيك
-            if(input.active) {
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 2;
+            // Joystick
+            if(input.touchActive) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.arc(input.sx, input.sy, 50, 0, Math.PI*2); ctx.stroke();
-                ctx.fillStyle = 'rgba(0, 243, 255, 0.5)';
-                ctx.beginPath(); ctx.arc(input.cx, input.cy, 20, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(0, 243, 255, 0.5)'; ctx.beginPath(); ctx.arc(input.cx, input.cy, 25, 0, Math.PI*2); ctx.fill();
             }
-
-            ctx.restore();
         }
 
-        // === التحكم باللمس ===
+        function updateHUD() {
+            document.getElementById('kill-count').innerText = kills;
+            document.getElementById('lvl-txt').innerText = player.level;
+            let hpPerc = Math.max(0, (player.hp / player.maxHp) * 100);
+            document.getElementById('hp-fill').style.width = hpPerc + "%";
+        }
+
+        // Inputs
+        window.addEventListener('keydown', e => { if('wasd'.includes(e.key.toLowerCase())) input.keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', e => { if('wasd'.includes(e.key.toLowerCase())) input.keys[e.key.toLowerCase()] = false; });
+
         window.addEventListener('touchstart', e => {
-            if(e.target.tagName === 'BUTTON' || e.target.closest('.upgrade-card')) return;
-            e.preventDefault();
-            if(!input.active && gameState === 'PLAY') {
-                let t = e.changedTouches[0];
-                input.active = true; input.id = t.identifier;
-                input.sx = t.clientX; input.sy = t.clientY;
-                input.cx = t.clientX; input.cy = t.clientY;
+            if(e.target.tagName === 'BUTTON') return; e.preventDefault();
+            if(!input.touchActive && gameState === 'PLAY') {
+                let t = e.changedTouches[0]; input.touchActive = true; input.id = t.identifier;
+                input.sx = t.clientX; input.sy = t.clientY; input.cx = t.clientX; input.cy = t.clientY;
             }
         }, {passive: false});
 
         window.addEventListener('touchmove', e => {
-            if(gameState !== 'PLAY') return;
-            e.preventDefault();
+            if(gameState !== 'PLAY') return; e.preventDefault();
             for(let i=0; i<e.changedTouches.length; i++) {
                 if(e.changedTouches[i].identifier === input.id) {
                     let t = e.changedTouches[i];
                     let dx = t.clientX - input.sx; let dy = t.clientY - input.sy;
-                    let dist = Math.min(50, Math.hypot(dx, dy));
-                    let angle = Math.atan2(dy, dx);
-                    input.cx = input.sx + Math.cos(angle) * dist;
-                    input.cy = input.sy + Math.sin(angle) * dist;
-                    input.dx = Math.cos(angle) * (dist/50);
-                    input.dy = Math.sin(angle) * (dist/50);
+                    let dist = Math.min(50, Math.hypot(dx, dy)); let angle = Math.atan2(dy, dx);
+                    input.cx = input.sx + Math.cos(angle) * dist; input.cy = input.sy + Math.sin(angle) * dist;
+                    input.dx = Math.cos(angle) * (dist/50); input.dy = Math.sin(angle) * (dist/50);
                 }
             }
         }, {passive: false});
 
-        window.addEventListener('touchend', e => {
-            for(let i=0; i<e.changedTouches.length; i++) {
-                if(e.changedTouches[i].identifier === input.id) {
-                    input.active = false; input.dx = 0; input.dy = 0;
-                }
-            }
-        });
-
+        window.addEventListener('touchend', e => { for(let i=0; i<e.changedTouches.length; i++) { if(e.changedTouches[i].identifier === input.id) { input.touchActive = false; input.dx = 0; input.dy = 0; } } });
     </script>
 </body>
 </html>
