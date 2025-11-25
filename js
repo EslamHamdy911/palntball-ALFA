@@ -1,0 +1,395 @@
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// === 1. إعداد الصوت ===
+const bgMusic = new Audio('music.mp3'); 
+bgMusic.loop = true; 
+bgMusic.volume = 0.5;
+
+let width, height;
+function resize() {
+    width = window.innerWidth; 
+    height = window.innerHeight;
+    canvas.width = width; 
+    canvas.height = height;
+}
+window.addEventListener('resize', resize); 
+resize();
+
+// === متغيرات اللعبة ===
+let gameState = 'START'; 
+let frame = 0;
+let kills = 0;
+let shake = 0;
+
+// === اللاعب ===
+const player = {
+    x: 0, y: 0, radius: 15, angle: 0,
+    hp: 100, maxHp: 100,
+    speed: 5,
+    level: 1,
+    bulletDmg: 25,
+    bulletSpeed: 14,
+    fireRate: 15, 
+    bulletCount: 1, 
+    spread: 0.1
+};
+
+// المصفوفات
+let enemies = [];
+let bullets = [];
+let particles = [];
+let items = []; 
+let floatingTexts = [];
+
+// === التحكم (لمس + كيبورد) ===
+const input = {
+    // بيانات اللمس
+    touchActive: false,
+    sx: 0, sy: 0, 
+    cx: 0, cy: 0, 
+    dx: 0, dy: 0, 
+    id: null,
+    // بيانات الكيبورد
+    keys: { w: false, a: false, s: false, d: false }
+};
+
+// ========================
+// نظام الغنائم
+// ========================
+const lootTypes = [
+    { id: 'heal', color: '#00ff00', text: '+HEALTH', chance: 0.15, apply: () => { player.hp = Math.min(player.maxHp, player.hp + 40); } },
+    { id: 'dmg', color: '#ff0000', text: '+DAMAGE', chance: 0.1, apply: () => { player.bulletDmg += 5; player.level++; } },
+    { id: 'multi', color: '#00ffff', text: '+MULTI SHOT', chance: 0.05, apply: () => { player.bulletCount++; player.spread += 0.05; player.level++; } },
+    { id: 'speed', color: '#ffff00', text: '+FIRE RATE', chance: 0.1, apply: () => { player.fireRate = Math.max(4, player.fireRate - 1); player.level++; } }
+];
+
+class ItemDrop {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.radius = 12; 
+        this.magnet = false;
+        this.type = lootTypes[0]; 
+        let r = Math.random();
+        if(r < 0.05) this.type = lootTypes[2]; 
+        else if(r < 0.15) this.type = lootTypes[3]; 
+        else if(r < 0.30) this.type = lootTypes[1]; 
+        else this.type = lootTypes[0]; 
+        this.color = this.type.color;
+    }
+
+    update() {
+        let dx = player.x - this.x; 
+        let dy = player.y - this.y;
+        let dist = Math.hypot(dx, dy);
+        
+        if(dist < 150) this.magnet = true;
+        
+        if(this.magnet) {
+            this.x += (dx/dist) * 12; 
+            this.y += (dy/dist) * 12;
+        }
+
+        if(dist < player.radius + this.radius) {
+            this.type.apply(); 
+            createFloatingText(player.x, player.y - 40, this.type.text, this.type.color, 20);
+            return true; 
+        }
+        return false;
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - 6, this.y - 6, 12, 12);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+        ctx.strokeRect(this.x - 6, this.y - 6, 12, 12);
+    }
+}
+
+// ========================
+// الكائنات
+// ========================
+class Enemy {
+    constructor() {
+        let r = Math.random();
+        this.type = 0; 
+        if(kills > 20 && r < 0.2) this.type = 1; 
+        if(kills > 50 && r < 0.1) this.type = 2; 
+
+        let angle = Math.random() * Math.PI * 2;
+        let dist = Math.max(width, height) * 0.7; 
+        this.x = player.x + Math.cos(angle) * dist;
+        this.y = player.y + Math.sin(angle) * dist;
+
+        if(this.type === 0) { 
+            this.hp = 30 + (kills * 0.5); this.speed = 2.5; 
+            this.radius = 15; this.color = '#ff0055';
+        } else if(this.type === 1) { 
+            this.hp = 20 + (kills * 0.2); this.speed = 4.5; 
+            this.radius = 10; this.color = '#ffff00';
+        } else { 
+            this.hp = 100 + (kills * 2); this.speed = 1.5; 
+            this.radius = 25; this.color = '#aa00ff';
+        }
+    }
+
+    update() {
+        let dx = player.x - this.x;
+        let dy = player.y - this.y;
+        let dist = Math.hypot(dx, dy);
+        let angle = Math.atan2(dy, dx);
+
+        this.x += Math.cos(angle) * this.speed;
+        this.y += Math.sin(angle) * this.speed;
+
+        if(dist < this.radius + player.radius) {
+            player.hp -= 0.5; 
+            shake = 3;
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius/3, 0, Math.PI*2); ctx.fill();
+    }
+}
+
+class FloatingText {
+    constructor(x, y, text, color, size) {
+        this.x = x; this.y = y; this.text = text; this.color = color; this.size = size;
+        this.life = 40; 
+    }
+    update() { this.y -= 1; this.life--; return this.life <= 0; }
+    draw() {
+        ctx.fillStyle = this.color; 
+        ctx.font = `bold ${this.size}px Arial`; 
+        ctx.fillText(this.text, this.x, this.y);
+    }
+}
+
+function createFloatingText(x, y, text, color, size=14) {
+    floatingTexts.push(new FloatingText(x, y, text, color, size));
+}
+
+// ========================
+// تشغيل اللعبة
+// ========================
+function startGame() {
+    bgMusic.play().catch(e => console.log("Audio Error:", e));
+    document.getElementById('start-screen').style.display = 'none';
+    player.x = width/2; player.y = height/2;
+    player.hp = 100; player.level = 1;
+    player.bulletDmg = 25; player.fireRate = 15; player.bulletCount = 1;
+    enemies = []; bullets = []; items = []; floatingTexts = [];
+    kills = 0; frame = 0;
+    gameState = 'PLAY';
+    loop();
+}
+
+function loop() {
+    if(gameState !== 'PLAY') return;
+    requestAnimationFrame(loop);
+    frame++;
+
+    ctx.fillStyle = '#050505'; 
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    if(shake > 0) {
+        ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+        shake *= 0.9; if(shake < 0.5) shake = 0;
+    }
+
+    // 1. Spawner
+    let maxEnemies = 5 + Math.floor(kills / 5);
+    if(enemies.length < maxEnemies) {
+        if(Math.random() < 0.05) enemies.push(new Enemy());
+    }
+
+    // 2. منطق الحركة الموحد (كيبورد + لمس)
+    let moveX = 0;
+    let moveY = 0;
+    let isMoving = false;
+
+    // أولوية للمس
+    if(input.touchActive) {
+        moveX = input.dx;
+        moveY = input.dy;
+        isMoving = true;
+    } else {
+        // الكيبورد (PC)
+        if (input.keys.w) moveY -= 1;
+        if (input.keys.s) moveY += 1;
+        if (input.keys.a) moveX -= 1;
+        if (input.keys.d) moveX += 1;
+        
+        // تطبيع الحركة المائلة
+        if (moveX !== 0 || moveY !== 0) {
+            let len = Math.hypot(moveX, moveY);
+            moveX /= len;
+            moveY /= len;
+            isMoving = true;
+        }
+    }
+
+    if (isMoving) {
+        player.x += moveX * player.speed;
+        player.y += moveY * player.speed;
+        player.x = Math.max(15, Math.min(width-15, player.x));
+        player.y = Math.max(15, Math.min(height-15, player.y));
+
+        // إطلاق النار
+        if(frame % player.fireRate === 0) {
+            let nearest = null, minDist = 9999;
+            for(let e of enemies) {
+                let d = Math.hypot(e.x - player.x, e.y - player.y);
+                if(d < minDist) { minDist = d; nearest = e; }
+            }
+            
+            let targetAngle = 0;
+            if(nearest && minDist < 400) {
+                targetAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+            } else {
+                targetAngle = Math.atan2(moveY, moveX);
+            }
+
+            for(let i=0; i<player.bulletCount; i++) {
+                let offset = (i - (player.bulletCount-1)/2) * player.spread;
+                bullets.push({
+                    x: player.x, y: player.y,
+                    vx: Math.cos(targetAngle+offset)*player.bulletSpeed,
+                    vy: Math.sin(targetAngle+offset)*player.bulletSpeed,
+                    life: 60
+                });
+            }
+        }
+    }
+
+    // 3. رسم اللاعب
+    ctx.fillStyle = '#00f3ff';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+
+    // 4. التحديثات
+    for(let i=items.length-1; i>=0; i--) {
+        items[i].draw();
+        if(items[i].update()) items.splice(i, 1);
+    }
+
+    for(let e of enemies) { e.update(); e.draw(); }
+
+    ctx.fillStyle = '#00f3ff'; 
+    for(let i=bullets.length-1; i>=0; i--) {
+        let b = bullets[i];
+        b.x += b.vx; b.y += b.vy; b.life--;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+
+        if(b.life <= 0) { bullets.splice(i,1); continue; }
+
+        let hit = false;
+        for(let j=enemies.length-1; j>=0; j--) {
+            let e = enemies[j];
+            let dx = b.x - e.x; let dy = b.y - e.y;
+            if(dx*dx + dy*dy < (e.radius+4)*(e.radius+4)) { 
+                e.hp -= player.bulletDmg;
+                hit = true;
+                if(e.hp <= 0) {
+                    kills++;
+                    if(Math.random() < 0.3) items.push(new ItemDrop(e.x, e.y));
+                    enemies.splice(j, 1);
+                }
+                break; 
+            }
+        }
+        if(hit) bullets.splice(i, 1);
+    }
+
+    for(let i=floatingTexts.length-1; i>=0; i--) {
+        floatingTexts[i].draw();
+        if(floatingTexts[i].update()) floatingTexts.splice(i, 1);
+    }
+
+    ctx.restore();
+    updateHUD();
+
+    if(player.hp <= 0) {
+        gameState = 'OVER';
+        document.getElementById('final-score').innerText = kills;
+        document.getElementById('game-over-screen').style.display = 'flex';
+    }
+
+    // رسم الجويستيك (يظهر فقط عند اللمس)
+    if(input.touchActive) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(input.sx, input.sy, 50, 0, Math.PI*2); ctx.stroke();
+        ctx.fillStyle = 'rgba(0, 243, 255, 0.5)';
+        ctx.beginPath(); ctx.arc(input.cx, input.cy, 25, 0, Math.PI*2); ctx.fill();
+    }
+}
+
+function updateHUD() {
+    document.getElementById('kill-count').innerText = kills;
+    document.getElementById('lvl-txt').innerText = player.level;
+    let hpPerc = Math.max(0, (player.hp / player.maxHp) * 100);
+    document.getElementById('hp-fill').style.width = hpPerc + "%";
+}
+
+// ===============================
+// معالجة الإدخال (كمبيوتر + موبايل)
+// ===============================
+
+// 1. مستمعات الكيبورد (WASD)
+window.addEventListener('keydown', e => {
+    switch(e.key.toLowerCase()) {
+        case 'w': input.keys.w = true; break;
+        case 'a': input.keys.a = true; break;
+        case 's': input.keys.s = true; break;
+        case 'd': input.keys.d = true; break;
+    }
+});
+
+window.addEventListener('keyup', e => {
+    switch(e.key.toLowerCase()) {
+        case 'w': input.keys.w = false; break;
+        case 'a': input.keys.a = false; break;
+        case 's': input.keys.s = false; break;
+        case 'd': input.keys.d = false; break;
+    }
+});
+
+// 2. مستمعات اللمس
+window.addEventListener('touchstart', e => {
+    if(e.target.tagName === 'BUTTON') return;
+    e.preventDefault();
+    if(!input.touchActive && gameState === 'PLAY') {
+        let t = e.changedTouches[0];
+        input.touchActive = true; input.id = t.identifier;
+        input.sx = t.clientX; input.sy = t.clientY;
+        input.cx = t.clientX; input.cy = t.clientY;
+    }
+}, {passive: false});
+
+window.addEventListener('touchmove', e => {
+    if(gameState !== 'PLAY') return;
+    e.preventDefault();
+    for(let i=0; i<e.changedTouches.length; i++) {
+        if(e.changedTouches[i].identifier === input.id) {
+            let t = e.changedTouches[i];
+            let dx = t.clientX - input.sx; let dy = t.clientY - input.sy;
+            let dist = Math.min(50, Math.hypot(dx, dy));
+            let angle = Math.atan2(dy, dx);
+            input.cx = input.sx + Math.cos(angle) * dist;
+            input.cy = input.sy + Math.sin(angle) * dist;
+            input.dx = Math.cos(angle) * (dist/50);
+            input.dy = Math.sin(angle) * (dist/50);
+        }
+    }
+}, {passive: false});
+
+window.addEventListener('touchend', e => {
+    for(let i=0; i<e.changedTouches.length; i++) {
+        if(e.changedTouches[i].identifier === input.id) {
+            input.touchActive = false; input.dx = 0; input.dy = 0;
+        }
+    }
+});
