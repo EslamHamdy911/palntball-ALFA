@@ -1,1 +1,57 @@
 
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEON WARS: FAST ACTION</title>
+    
+    <!-- استدعاء الخط الرقمي -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    
+    <!-- ربط ملف التصميم -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- شاشة البداية -->
+    <div id="start-screen" class="screen">
+        <h1>NEON<br>WARS</h1>
+        <p>FAST PACED ACTION</p>
+        <!-- هذا الزر سيشغل الصوت واللعبة معاً -->
+        <button class="btn" onclick="startGame()">START MISSION</button>
+        <p style="font-size: 10px; color: #555; margin-top: 30px;">PICK UP ITEMS TO UPGRADE</p>
+    </div>
+
+    <!-- شاشة الخسارة -->
+    <div id="game-over-screen" class="screen" style="display:none;">
+        <h1 style="color: #ff0055;">GAME OVER</h1>
+        <p>SCORE: <span id="final-score">0</span></p>
+        <button class="btn" onclick="location.reload()">RETRY</button>
+    </div>
+
+    <!-- مساحة اللعب -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- واجهة المستخدم (HUD) -->
+    <div id="ui-layer">
+        
+        <!-- شريط الصحة في الأعلى -->
+        <div id="hud-top">
+            <div id="hp-bar-bg">
+                <div id="hp-fill"></div>
+            </div>
+        </div>
+        
+        <!-- العدادات في الأسفل -->
+        <div id="hud-bottom">
+            <div>KILLS: <span id="kill-count">0</span></div>
+            <div style="font-size: 10px; color:#aaa;">LVL: <span id="lvl-txt">1</span></div>
+        </div>
+        
+    </div>
+
+    <!-- ربط ملف البرمجة -->
+    <script src="script.js"></script>
+</body>
+</html>
